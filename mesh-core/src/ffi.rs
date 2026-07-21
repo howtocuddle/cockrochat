@@ -75,7 +75,7 @@ pub fn verify_frame(bytes: Vec<u8>, pubkey: Vec<u8>) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Measurement / debug surface — drives the RF-overlap τ rig (mesh-build-plan.md §5).
+// Measurement / debug surface — drives the RF-overlap τ rig (README.md §4).
 // Still byte-only: the shim logs raw overheard (mark, rssi, epoch) and asks the core to
 // compute sketches + Jaccard. τ and the RSSI floor stay caller-supplied so they can be TUNED
 // from real field data, never hardcoded/guessed.

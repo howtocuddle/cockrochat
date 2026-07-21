@@ -4,7 +4,7 @@ This project defends people from aggressive state actors. The rules below are **
 preferences** — each one is a failure class that has killed a real system (see the "Breaking
 Bridgefy" papers). Violating one is a security bug, not a nit. A reviewer WILL block on these.
 
-## The seven invariants (mesh-build-plan.md §7)
+## The seven invariants (README.md §7)
 
 1. **One codec, in Rust, shared.** No parsing in the platform shims (Kotlin/Swift). The shims
    move raw bytes in and out; `mesh-core::codec` is the *only* thing that interprets them. A

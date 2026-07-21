@@ -1,6 +1,6 @@
 //! `pocp` — Proof-of-Co-Presence. Cell digest (fuzzy KMV over overheard marks) + spacetime
 //! witness. Blocks the remote-van flood: you cannot forge co-presence you did not physically
-//! observe. See mesh-build-plan.md §2.3. `tau` is MEASURED (RF-overlap rig §5), never guessed.
+//! observe. See README.md §4. `tau` is MEASURED (RF-overlap rig), never guessed.
 
 use std::collections::BTreeSet;
 

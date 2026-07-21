@@ -1,7 +1,7 @@
 //! `trust` — diversity + corroboration. Danger escalates only at >= k DISTINCT locally-verified
 //! cells (invariant #7: trust is per-message physical corroboration, never bound to an identity).
 //! v0: only locally-verified cells increment (F5); CellMismatch events are logged, not yet
-//! challenged (fraud-proof protocol deferred). See mesh-build-plan.md §2.5.
+//! challenged (fraud-proof protocol deferred). See README.md §5.
 
 /// KMV over DISTINCT locally-verified cell digests backing one alert.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

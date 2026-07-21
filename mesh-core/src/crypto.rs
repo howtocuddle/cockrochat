@@ -2,7 +2,7 @@
 //!
 //! Constant-time verify. Domain-separated signatures. Keys persisted only via the platform
 //! `KeyStore` trait (Keystore/Keychain) — never written to core-owned storage (invariant #5).
-//! See mesh-build-plan.md §2.2.
+//! See README.md §2.
 
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit, Nonce, aead::Aead};
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};

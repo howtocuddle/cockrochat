@@ -1,6 +1,6 @@
 //! `radio` — the BLE transport seam. Implemented by each platform shim (Kotlin/Swift); the
 //! core never touches the radio directly. Transport = BLE 5 extended advertising, connectionless,
-//! one 194 B AUX PDU per frame, Coded PHY on the frontier for range. See mesh-build-plan.md §3.
+//! one 194 B AUX PDU per frame, Coded PHY on the frontier for range. See README.md §6.
 
 use crate::codec::FRAME_LEN;
 

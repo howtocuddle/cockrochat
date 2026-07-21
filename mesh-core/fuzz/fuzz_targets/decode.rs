@@ -1,5 +1,5 @@
 #![no_main]
-//! Fuzz the anti-zip-bomb boundary (mesh-build-plan.md §2.1 / M1 gate).
+//! Fuzz the anti-zip-bomb boundary (README.md §3).
 //!
 //! Guarantees checked on EVERY input:
 //!   * `decode` never panics / hangs / OOMs (libfuzzer catches these).

@@ -1,7 +1,7 @@
 //! `beacon` — chained hash beacon (NO VDF in v0, audit F1). Entropy = marks from
 //! NON-propagating (TTL 0/1) local traffic: agreed among locals, unobservable to a remote van.
 //! Acceleration cap via `floor_ms`. Chain-stall falls back to a local beacon (F6).
-//! See mesh-build-plan.md §2.4.
+//! See README.md §4.
 
 use crate::pocp::CellSketch;
 

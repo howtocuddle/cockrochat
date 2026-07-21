@@ -1,6 +1,6 @@
 //! mesh-core — the single, shared, security-critical core for the offline protest mesh.
 //!
-//! NON-NEGOTIABLE INVARIANTS (mesh-build-plan.md §7 — enforced in code, see CONTRIBUTING):
+//! NON-NEGOTIABLE INVARIANTS (README.md §7 — enforced in code, see CONTRIBUTING):
 //!   1. One codec, in Rust, shared. No parsing in the platform shims.
 //!   2. Parse -> verify -> decide, in that order, always. Nothing relayed/rendered pre-validation.
 //!   3. Fixed 194 B frame, no compression, no variable fields. Deviation => silent total drop.

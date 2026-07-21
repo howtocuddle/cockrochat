@@ -3,7 +3,7 @@
 //!
 //! PROCESSING ORDER IS ENFORCED HERE AND NON-NEGOTIABLE (invariant #2, v1 §5.5):
 //!   len -> epoch in {N, N-1} -> mark-unseen -> sig-verify -> witness-structural -> THEN relay/render.
-//! Nothing is relayed or rendered before validation completes. See mesh-build-plan.md §2.6.
+//! Nothing is relayed or rendered before validation completes. See README.md §2.
 
 use crate::codec::FRAME_LEN;
 
