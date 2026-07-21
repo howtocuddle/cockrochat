@@ -1,0 +1,19 @@
+R_DEF: Internal format may change without notice
+local
+id btnApply
+id btnCompare
+id btnCopySketch
+id btnExport
+id btnStart
+id btnStop
+id etAdv
+id etEpoch
+id etFloor
+id etPeer
+id etTau
+id swCoded
+id tvJaccard
+id tvStats
+layout activity_main
+string app_name
+style Theme.Cockroachat

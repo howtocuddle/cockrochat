@@ -1,0 +1,14 @@
+# Rust build artifacts
+/mesh-core/target
+/mesh-core/fuzz/target
+
+# Fuzzing corpus + crash artifacts (regenerated; keep only curated seeds if ever added)
+/mesh-core/fuzz/corpus
+/mesh-core/fuzz/artifacts
+
+# UniFFI-generated bindings (regenerated from the cdylib on demand)
+/mesh-core/bindings
+
+# Editor / OS cruft
+**/*.rs.bk
+.DS_Store
