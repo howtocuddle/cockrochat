@@ -181,3 +181,28 @@ cargo run --bin uniffi-bindgen -- generate --library target/release/libmesh_core
 # Fuzz the 194-byte parser boundary (Nightly toolchain required)
 cargo +nightly fuzz run decode -- -max_total_time=60
 ```
+
+---
+
+## 9. Glossary of Terms
+
+* **AUX PDU (Auxiliary Packet Data Unit)**: In BLE 5 Extended Advertising, additional payload bytes (up to 255 B per packet) offloaded from the primary 31-byte legacy channels (channels 37, 38, 39) onto secondary data channels (channels 0–36).
+* **BLAKE3**: An extremely fast, cryptographic hash function used in `cockroachat` for key derivation (`KDF`), mark hashing, KMV sketching, and beacon seed chaining.
+* **Bridgefy Class Vulnerabilities**: A category of protocol design flaws documented in 2021/2022 security audits where mesh nodes relayed unparsed payloads (causing parsing crashes / zip bombs), relied on virtual identities (vulnerable to Sybil attacks), or allowed passive location tracking.
+* **CellMismatch Alarm**: An internal security event generated when a received message claims a Proof-of-Co-Presence witness that fails to match the receiving device's locally observed physical cell (indicating a packet replay or relocation attack).
+* **Chained Epoch Beacon**: A self-clocking, forward-unpredictable random seed generator where the seed for epoch $N$ is derived via $seed_N = \text{BLAKE3}(seed_{N-1} \parallel E_N)$. Prevents attackers from pre-computing future seeds or building offline surveillance tracking dictionaries.
+* **Diversity Sketch**: A K-Minimum Values (KMV) sketch constructed solely from *distinct, locally-verified* physical cell digests. Used to determine how many independent geographic locations have corroborated a danger alert.
+* **Ed25519 Ephemeral Signature**: An elliptic-curve signature scheme using public-key cryptography where keys rotate automatically every hour (`Ephemeral`), preventing long-term tracking of user devices.
+* **Epoch ($T_{epoch}$)**: A fixed time window (typically 5 minutes) during which devices sample local ambient marks, compute cell sketches, and sync beacon state.
+* **Jaccard Distance ($\tau$)**: A mathematical measure of similarity between two sets $A$ and $B$, defined as $J(A, B) = \frac{|A \cap B|}{|A \cup B|}$. In `cockroachat`, $J(A, B) \ge \tau$ determines whether two devices are physically co-present in the same cell.
+* **KMV Sketch (K-Minimum Values)**: A probabilistic data structure that retains the $K$ smallest hash values of an observed dataset. Allows devices to compare physical cell composition in constant memory without transmitting raw observation lists.
+* **LE Coded PHY**: A physical layer option introduced in Bluetooth 5 that uses Forward Error Correction (FEC) (S=2 or S=8) to quadruple radio range at the expense of lower data throughput.
+* **Local Ambient Mark**: A 16-byte pseudo-random identifier emitted by nearby devices in non-propagating local broadcasts, sampled by nearby nodes to construct physical cell sketches.
+* **Overflow Area (iOS CoreBluetooth)**: A special Apple-proprietary hashing mechanism used when an iOS app advertises service UUIDs in the background. Accessible only by other iOS devices explicitly scanning for those exact service UUIDs, rendering the advertisement invisible to Android background scanners.
+* **Parse-Before-Forward**: A strict architectural invariant requiring every incoming packet to be completely decoded, length-checked, epoch-verified, signature-authenticated, and witness-checked before any decision is made to relay or display it.
+* **Proof-of-Co-Presence (PoCP)**: A cryptographic protocol proving that a node was physically present in a specific crowd cell at a specific time by demonstrating knowledge of the ambient RF observations of that cell.
+* **Spacetime Witness**: A short message authentication code ($MAC_{KDF(cell \parallel seed)}(msg)$) embedded in a frame that authenticates a message against a specific physical cell sketch and epoch seed.
+* **Trickle Algorithm**: A self-regulating, epidemic broadcast algorithm (RFC 6206) that adjusts retransmission intervals based on local network density ($K_{supp}$), preventing broadcast storms while ensuring rapid propagation over multi-hop networks.
+* **UniFFI**: Mozilla’s multi-language binding generator tool used to expose the Rust `mesh-core` interface cleanly to Kotlin (Android) and Swift (iOS) shims.
+* **Unsigned Hop-Mutable Region**: The final 12 bytes of the 194-byte frame (`reserved`), containing mutable metrics like TTL and hop count. Excluded from the Ed25519 signature so relays can decrement TTL without invalidating signatures.
+
