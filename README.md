@@ -1,48 +1,40 @@
-# cockroachat — Offline Decentralized Protest Mesh
+<![CDATA[<div align="center">
 
-`cockroachat` is a decentralized, infrastructure-free mesh messaging and alert protocol built for protests, civil demonstrations, and emergency situations under hostile electronic surveillance or network blackouts.
+# 🪳 cockroachat
 
-Phones relay short **danger alerts** over Bluetooth Low Energy (BLE 5.0 Extended Advertising) without cell towers, Wi-Fi routers, central servers, internet access, or user accounts. Trust in `cockroachat` is grounded in **Physical Co-Presence** and **Spatial Diversity**, preventing remote adversaries (such as a surveillance van running virtual nodes off-site) from injecting, forging, or amplifying false alerts.
+**Offline Decentralized Protest Mesh**
 
-> ⚠️ **v0 status — design target vs. shipped code.** The threat-model defenses below describe the protocol's **design target**. Three critical mechanisms are documented but **not yet enforced** in the running v0 node:
->
-> * **PoCP witness (proximity gating):** The `pocp::witness` / `verify_witness_local` functions exist and are wired into the ingest pipeline (M5a). Public frames with a valid PoCP witness are verified against the local cell sketch; mismatching or stale witnesses are dropped or flagged. The witness key uses the public epoch number (not the beacon seed) to preserve cross-cell Tier-2 verification.
-> * **Beacon chain (forward secrecy):** The `beacon.rs` self-clocking chain is implemented (M5b). Marks and ephemeral signing keys are derived from the one-way hash chain (`seed_N = BLAKE3(seed_{N-1} || E_N)` where $E_N$ is ambient RF entropy from LocalImmediate marks). Post-seizure, past seeds, marks, and public keys are unrecoverable. Wall-clock epochs remain for coordination; the beacon provides forward secrecy, not epoch hiding.
-> * **Diversity trust (multi-cell confidence):** `trust.rs` is fully stubbed. A single-cell origination is treated identically to multi-cell crowd corroboration.
->
-> **What v0 DOES enforce:** Ed25519 signature authentication (`verify_strict`), parse-before-forward codec safety (fixed 226-byte frames, no varint, no compression), frame-hash deduplication, danger-only alert filtering, VDL proof-of-work cost-gating on private frames (Tier-3), and ChaCha20-Poly1305 AEAD for pairwise messages. See §4 for per-module implementation status and the audit findings for a complete gap analysis.
+[![Rust](https://img.shields.io/badge/Core-Rust-b7410e?style=flat-square&logo=rust)](mesh-core/)
+[![Android](https://img.shields.io/badge/Shim-Android%20(Kotlin)-3DDC84?style=flat-square&logo=android)](android/)
+[![BLE 5.0](https://img.shields.io/badge/Transport-BLE%205.0%20Extended-0082FC?style=flat-square&logo=bluetooth)]()
+[![License](https://img.shields.io/badge/License-TBD-lightgrey?style=flat-square)]()
 
----
+*Phones relay short danger alerts over Bluetooth Low Energy without cell towers, Wi-Fi, servers, internet, or accounts.*
 
-## 1. Threat Model & Bridgefy Vulnerabilities Addressed
+*Trust is grounded in **Physical Co-Presence** and **Spatial Diversity** — preventing remote adversaries from injecting, forging, or amplifying false alerts.*
 
-`cockroachat` is explicitly engineered to overcome the systemic flaws discovered in early mesh apps like Bridgefy (documented in the 2021 CT-RSA and 2022 USENIX Security studies):
-
-1. **Parse-Before-Forward Security (Anti-Zip-Bomb Boundary)**
-   - *Bridgefy Flaw*: Relayed payloads before parsing/validating them, enabling single malformed packets to crash every node on the mesh.
-   - *`cockroachat` Fix*: Enforces a strict `Parse -> Verify -> Decide -> Forward` execution pipeline inside a memory-safe Rust core. Nothing is relayed or presented to the UI until length checks, signature verification, and witness checks pass completely.
-
-2. **Physical Spatial Diversity over Virtual Web-of-Trust** *(v0: documented, not enforced)*
-   - *Bridgefy Flaw*: Relied on digital identity tokens or accumulated reputation, enabling an adversary to spawn thousands of virtual identities (Sybil attack) to hijack trust algorithms.
-   - *`cockroachat` Fix*: Ignores virtual identity counts. A message gains confidence only as it is verified by distinct *geographic cells* (derived from physical ambient RF observations). An off-site adversary creating 10,000 virtual identities across two physical devices produces zero spatial entropy and is ignored by the crowd.
-
-3. **Chained Epoch Beacon (Forward Secrecy / Coercion Resistance)**
-   - *Bridgefy Flaw*: A seized device could have its static identity seed extracted, allowing retrospective reconstruction of the user's entire session history — every mark, every public key, every movement trace — by matching against logs.
-   - *`cockroachat` Fix*: Derives marks and ephemeral signing keys from a one-way hash-chain beacon (`seed_N = BLAKE3(seed_{N-1} || E_N)` where $E_N$ is ambient entropy from LocalImmediate marks). Past beacon seeds are unrecoverable from the current seed, so post-seizure analysis cannot reconstruct prior marks or public keys. A seized device yields the current epoch only — not the user's full protest history.
-
-4. **Danger-Only Asymmetric Alerting**
-   - *Bridgefy Flaw*: Symmetric messaging allowed attackers to inject false "ALL CLEAR" or "SAFE HERE" broadcasts to lure protesters into traps.
-   - *`cockroachat` Fix*: The public mesh only carries danger alerts. Silence is never interpreted as safety, and nodes cannot broadcast "safe" status on the public plane.
-
-5. **Open Public Plane Transparency**
-   - *Bridgefy Flaw*: Attempted to wrap public broadcast alerts in broken E2E crypto wrappers, giving users a false sense of privacy while leaking metadata.
-   - *`cockroachat` Fix*: The public plane is openly unencrypted and authenticated per message. It carries public danger signals that are already physically visible to anyone present.
+</div>
 
 ---
 
-## 2. Architecture & Module Design
+> [!IMPORTANT]
+> **v0 status — design target vs. shipped code.**
+>
+> The three protocol pillars and their current implementation state:
+>
+> | Defense | Status | Detail |
+> |---|:---:|---|
+> | **PoCP witness** (proximity gating) | ✅ Implemented | `pocp::witness` and `verify_witness_local` are wired into the ingest pipeline. Public frames with a valid PoCP witness are verified against the local cell sketch; mismatching or stale witnesses are dropped or flagged. |
+> | **Beacon chain** (forward secrecy) | ✅ Implemented | `beacon::advance` computes chained seeds `seed_N = BLAKE3(seed_{N-1} ∥ E_N)` with local RF entropy, acceleration-floor checks, and low-entropy fallback. Marks and ephemeral signing keys are derived from the one-way chain. |
+> | **Diversity trust** (multi-cell confidence) | 🔲 Stubbed | `trust::merge`, `distinct_estimate`, and `corroboration` return `todo!("M6")`. Single-cell origination is treated identically to multi-cell crowd corroboration. v0 tracks per-frame cell claims via `TrustState` but does not aggregate or threshold them. |
+>
+> **What v0 enforces today:** Ed25519 signature authentication (`verify_strict`), parse-before-forward codec safety (fixed 226-byte frames, no varint, no compression), frame-hash deduplication, PoCP witness verification against local cell sketches, chained beacon forward secrecy, danger-only alert filtering, VDL proof-of-work cost-gating on Tier-3 private frames, and ChaCha20-Poly1305 AEAD for pairwise messages.
 
-All security-critical logic (codec parsing, cryptography, Proof-of-Co-Presence, beacon chaining, trust aggregation, and protocol state machine) resides in a single, memory-safe Rust core (`mesh-core`). Platform shims in Kotlin (Android) and Swift (iOS) are thin layers responsible **only** for radio hardware I/O, OS background lifecycles, UI rendering, and secure key storage. A Linux laptop client (`laptop/`) links the same `mesh-core` crate directly for desktop testing via BlueZ.
+---
+
+## 📐 Architecture & Module Design
+
+All security-critical logic lives in a single, memory-safe Rust core (`mesh-core`). Platform shims are thin layers responsible **only** for radio I/O, OS lifecycles, UI rendering, and key storage. A Linux laptop client links `mesh-core` directly for desktop testing via BlueZ.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -60,20 +52,24 @@ All security-critical logic (codec parsing, cryptography, Proof-of-Co-Presence, 
            └──────────────────────┘        └───────────────────────┘
 ```
 
-### Rust Core (`mesh-core`) Modules
+### Module Status Matrix
 
-* **`codec`**: Zero-allocation, non-panicking, fixed-offset 226-byte encoder/decoder. Strict total-failure semantics: any byte-length deviation or malformed header results in immediate drop with zero side effects.
-* **`crypto`**: Ephemeral Ed25519 signature scheme with beacon-rotating keys (forward secrecy via chained beacon seed), domain-separated hashing (BLAKE3), X25519 Diffie-Hellman key exchange, and ChaCha20-Poly1305 AEAD routines.
-* **`message`**: Single origination path for all signed frames. Derives per-epoch marks from the beacon seed, builds the wire frame, and provides `body_text` / `frame_hash` accessors.
-* **`pocp`**: Proof-of-Co-Presence engine. Constructs K-Minimum Values (KMV) fuzzy sketches from overheard ambient BLE marks, evaluates Jaccard similarity ($\tau$), and verifies spacetime witnesses ($MAC_{KDF(cell \parallel seed)}(msg)$).
-* **`beacon`**: Self-clocking, chained hash beacon. Computes dynamic epoch seeds using locally observed non-propagating mark entropy and enforces acceleration floor constraints.
-* **`trust`**: Spatial diversity aggregator. Tracks distinct, locally verified physical cell digests and flags spatial anomalies (`CellMismatch` relocation alarms).
-* **`statemachine`**: Core packet processing engine. Controls seen-set dedup (time-decaying hash map), Trickle suppression timers ($K_{supp}$, $W$, RSSI slot biasing), TTL/hop management, and alert dispatch.
-* **`private`**: Tier-3 private messaging. Seals/opens 64-byte message bodies with ChaCha20-Poly1305 AEAD using pairwise keys derived via `crypto::pair_derive`. Nonces are constructed from epoch + mark prefix to prevent reuse.
-* **`vdl`**: Verifiable Delay Lottery. Proof-of-work cost gate for Tier-3 private frames — `solve` finds a witness with ≥ `VDL_DIFFICULTY_BITS` leading zero bits; `verify` checks it with a single BLAKE3 hash.
-* **`store`**: Size-capped, memory-bounded persistent storage with automated auto-decay and hardware panic-wipe capabilities.
-* **`ffi`**: UniFFI-exported interface consumed by the Android Kotlin shim (and future iOS Swift shim).
-* **`radio`**: Trait definition (`RadioPort`) for the BLE transport seam implemented by each platform shim.
+| Module | Purpose | Status | Tests |
+|:---|:---|:---:|:---:|
+| `codec` | Zero-allocation fixed 226-byte encoder/decoder. Strict total-failure semantics. | ✅ | 9 |
+| `crypto` | Ed25519 ephemeral signing, BLAKE3 KDF, X25519 DH, ChaCha20-Poly1305 AEAD | ✅ | 8 |
+| `message` | Frame origination (`originate`, `originate_private`), `body_text`, `frame_hash` | ✅ | 19 |
+| `pocp` | KMV sketches, Jaccard similarity, spacetime witness MAC, `verify_witness_local` | ✅ | 18 |
+| `beacon` | Self-clocking chained hash beacon, entropy gathering, acceleration floor | ✅ | 13 |
+| `private` | Tier-3 ChaCha20-Poly1305 seal/open with epoch+mark nonces | ✅ | 6 |
+| `vdl` | Proof-of-work cost gate (`solve`/`verify`, 22-bit difficulty) | ✅ | 5 |
+| `statemachine` | Parse→Verify→Decide→Forward pipeline, `relay_decision`, `Dedup` | ✅ | 12 |
+| `trust` | Cell-claim tracking & anti-inflation. **Aggregation stubbed** (`todo!("M6")`) | 🔲 | 5 |
+| `store` | Panic-wipe trigger. Persistence lives on platform shims. | ✅ | — |
+| `ffi` | UniFFI exports (30+ functions) consumed by Android Kotlin shim | ✅ | 9 |
+| `radio` | `RadioPort` trait definition for platform transport seam | ✅ | — |
+
+> **Test suite:** 115 unit + property + integration tests across the core. Includes 10 `proptest` property-based tests for codec zero-panic/roundtrip and PoCP determinism/symmetry.
 
 ### Laptop Client (`laptop/`)
 
@@ -81,9 +77,45 @@ A Linux desktop mesh node built on `bluer` (BlueZ async bindings) and `tokio`. L
 
 ---
 
-## 3. Fixed 226-Byte Wire Protocol Spec
+## 🛡️ Threat Model & Bridgefy Vulnerabilities Addressed
 
-To maximize transmission reliability over BLE Extended Advertising without fragmentation, every `cockroachat` packet is serialized into a strict **226-byte fixed-size binary layout**. Variable-length fields, TLVs, and compression are strictly prohibited.
+`cockroachat` is explicitly engineered to overcome the systemic flaws discovered in early mesh apps like Bridgefy (documented in the 2021 CT-RSA and 2022 USENIX Security studies):
+
+### 1. Parse-Before-Forward Security (Anti-Zip-Bomb Boundary)
+
+> **Bridgefy Flaw:** Relayed payloads before parsing/validating them, enabling single malformed packets to crash every node on the mesh.
+
+**cockroachat Fix:** Enforces a strict `Parse → Verify → Decide → Forward` execution pipeline inside a memory-safe Rust core. Nothing is relayed or presented to the UI until length checks, signature verification, and witness checks pass completely.
+
+### 2. Physical Spatial Diversity over Virtual Web-of-Trust
+
+> **Bridgefy Flaw:** Relied on digital identity tokens or accumulated reputation, enabling Sybil attacks with thousands of virtual identities.
+
+**cockroachat Fix:** Ignores virtual identity counts. A message gains confidence only as it is verified by distinct *geographic cells* (derived from physical ambient RF observations). An off-site adversary creating 10,000 virtual identities across two physical devices produces zero spatial entropy and is ignored by the crowd.
+
+### 3. Chained Epoch Beacon (Forward Secrecy / Coercion Resistance)
+
+> **Bridgefy Flaw:** A seized device could have its static identity seed extracted, allowing retrospective reconstruction of the user's entire session history.
+
+**cockroachat Fix:** Derives marks and ephemeral signing keys from a one-way hash-chain beacon (`seed_N = BLAKE3(seed_{N-1} ∥ E_N)` where `E_N` is ambient entropy from LocalImmediate marks). Past beacon seeds are unrecoverable from the current seed, so post-seizure analysis cannot reconstruct prior marks or public keys. A seized device yields the current epoch only — not the user's full protest history.
+
+### 4. Danger-Only Asymmetric Alerting
+
+> **Bridgefy Flaw:** Symmetric messaging allowed attackers to inject false "ALL CLEAR" broadcasts to lure protesters into traps.
+
+**cockroachat Fix:** The public mesh only carries danger alerts. Silence is never interpreted as safety, and nodes cannot broadcast "safe" status on the public plane.
+
+### 5. Open Public Plane Transparency
+
+> **Bridgefy Flaw:** Attempted to wrap public broadcast alerts in broken E2E crypto wrappers, giving users a false sense of privacy while leaking metadata.
+
+**cockroachat Fix:** The public plane is openly unencrypted and authenticated per message. It carries public danger signals that are already physically visible to anyone present.
+
+---
+
+## 📦 Fixed 226-Byte Wire Protocol
+
+Every `cockroachat` packet is serialized into a strict **226-byte fixed-size binary layout** to maximize BLE Extended Advertising reliability without fragmentation. Variable-length fields, TLVs, and compression are strictly prohibited.
 
 ```
 +-------------------+------------------+-----------------------+--------------------+
@@ -103,114 +135,113 @@ To maximize transmission reliability over BLE Extended Advertising without fragm
 
 ### Frame Field Breakdown
 
-| Byte Range | Field Name | Type / Size | Description |
-|---|---|---|---|
-| `0..16` | `mark` | `[u8; 16]` | Pseudo-random message identifier used for deduplication, Trickle suppression, and local entropy generation. |
-| `16..18` | `hdr` | `[u8; 2]` | Packet header: Version (4 bits), Packet Type (4 bits), Flags/Tier (8 bits). |
-| `18..34` | `div_sketch` | `[u8; 16]` | KMV sketch digest / AEAD nonce counter (first 8 bytes). |
-| `34..38` | `epoch` | `u32` (BE) | Big-endian epoch index derived from the self-clocking beacon chain. |
-| `38..102` | `body` | `[u8; 64]` | Payload area containing danger alert text or structured emergency codes. |
-| `102..118` | `pocp_wit` | `[u8; 16]` | VDL proof-of-work witness (Tier-3) / PoCP witness (future). |
-| `118..150` | `pk` | `[u8; 32]` | Ephemeral Ed25519 public key. Enables any relay or endpoint to verify the frame signature without pre-shared key material. |
-| `150..214` | `sig` | `[u8; 64]` | Ephemeral Ed25519 signature authenticating canonical bytes `[0..150)`. |
-| `214..226` | `reserved` | `[u8; 12]` | Unsigned, hop-mutable region containing TTL ($H_{max}$), hop count, and RSSI metrics. Modified in-flight without invalidating `sig`. |
+| Byte Range | Field | Size | Description |
+|:---|:---|:---|:---|
+| `0..16` | `mark` | 16 B | Pseudo-random ID for deduplication, Trickle suppression, and local entropy |
+| `16..18` | `hdr` | 2 B | Version (4b), Packet Type (4b), Flags/Tier (8b) |
+| `18..34` | `div_sketch` | 16 B | KMV sketch digest / AEAD nonce counter (first 8 bytes) |
+| `34..38` | `epoch` | 4 B | Big-endian epoch index from self-clocking beacon chain |
+| `38..102` | `body` | 64 B | Danger alert text or structured emergency codes |
+| `102..118` | `pocp_wit` | 16 B | PoCP witness MAC (public) / VDL proof-of-work witness (Tier-3) |
+| `118..150` | `pk` | 32 B | Ephemeral Ed25519 public key |
+| `150..214` | `sig` | 64 B | Ed25519 signature over canonical bytes `[0..150)` |
+| `214..226` | `reserved` | 12 B | Unsigned hop-mutable: TTL, hop count, RSSI metrics |
 
 ---
 
-## 4. Cryptographic & Protocol Mechanics
+## 🔐 Cryptographic & Protocol Mechanics
 
 ### Proof-of-Co-Presence (PoCP)
-1. **Ambient Mark Sampling**: Each device passively records ambient marks from raw BLE advertisements emitted by nearby nodes (within ~30 meters).
-2. **KMV Sketch Construction**: The set of overheard marks is hashed and truncated into a K-Minimum Values (KMV) bottom-$k$ sketch representing the device's immediate physical cell.
-3. **Proximity Verification**: Devices compute Jaccard distance between sketches:
-   $$J(A, B) = \frac{|A \cap B|}{|A \cup B|} \ge \tau$$
-   If $J(A, B) \ge \tau$, co-presence is verified. A cell mismatch triggers a `CellMismatch` security alert, identifying relocation or replay attacks.
+
+1. **Ambient Mark Sampling** — Each device passively records ambient marks from BLE advertisements emitted by nearby nodes (~30m radius).
+2. **KMV Sketch Construction** — Overheard marks are hashed and truncated into a K-Minimum Values (KMV) bottom-*k* sketch representing the device's immediate physical cell.
+3. **Spacetime Witness** — The originator computes `BLAKE3_MAC(witness_key(div_sketch, seed), frame[0..102])` and embeds it in the `pocp_wit` field.
+4. **Proximity Verification** — Receivers verify the witness MAC, then compute Jaccard distance between the frame's `div_sketch` and their own local sketch:
+
+$$J(A, B) = \frac{|A \cap B|}{|A \cup B|} \ge \tau$$
+
+A cell mismatch triggers a `CellMismatch` security alert, identifying relocation or replay attacks.
 
 ### Chained Epoch Beacon
-- **Seed Chaining Formula**:
-  $$seed_N = \text{BLAKE3}(seed_{N-1} \parallel E_N)$$
-- **Entropy Source ($E_N$)**: Digest of the $k$ smallest marks collected from *non-propagating* (TTL=0 or 1) local traffic during epoch $N-1$. Because $E_N$ is observed locally, an off-site surveillance node cannot observe or predict it.
-- **Self-Clocking Cap**: Nodes only advance to $seed_N$ if $\ge 4\text{ minutes}$ have elapsed since $seed_{N-1}$, preventing clock-acceleration attacks.
-- **v0 status**: STUB — `beacon.rs` (local_entropy, advance, fallback_local all return `todo!()`).\
-  The beacon self-clocking and entropy-gathering logic is not yet implemented. In v0, the epoch
-  counter is derived from the unix wall clock (`unix-time-ms / epochMs`). An adversary with
-  control over the device clock can manipulate epoch boundaries. The chained hash *formula* is
-  documented but not wired into the running node.
 
-### Proof-of-Co-Presence (PoCP)
-
-- **v0 status**: STUB — `pocp.rs::witness` and `pocp.rs::verify_witness_local` return `todo!()`.\
-  The KMV sketch-building (`observe`) and Jaccard comparison (`jaccard`, `matches`) are fully
-  implemented and tested. The spacetime witness MAC that proves physical presence (the critical
-  gate against remote-van Sybil attacks) is *not yet built*. Frames have the 16-byte `pocp_wit`
-  field on the wire but it carries the VDL proof-of-work witness for Tier-3 frames instead.
-  Co-presence verification is not enforced at relay or display time.
+- **Seed Chaining:** $seed_N = \text{BLAKE3}(\texttt{"mesh-core:v1:beacon-advance"} \parallel seed_{N-1} \parallel E_N)$
+- **Entropy Source ($E_N$):** Digest of deduplicated marks from *non-propagating* local traffic during epoch $N-1$. Because $E_N$ is observed locally, an off-site surveillance node cannot observe or predict it.
+- **Acceleration Floor:** Nodes only advance to $seed_N$ if the configured `floor_ms` has elapsed since $seed_{N-1}$, preventing clock-acceleration attacks.
+- **Low-Entropy Fallback:** If fewer than `min_hearers` unique marks were observed, `fallback_local` advances with all-zero entropy and flags `low_entropy = true` for downstream handling.
 
 ### Spatial Diversity / Trust
 
-- **v0 status**: STUB — `trust.rs::merge`, `distinct_estimate`, and `corroboration` all return
-  `todo!()`. The diversity aggregator that distinguishes "10,000 virtual identities on 2 physical
-  devices" from "10,000 real devices in distinct cells" does not exist yet. The `div_sketch` field
-  on the wire is repurposed for the AEAD nonce counter (Tier-3 private frames).
+> **v0 status:** `trust::merge`, `distinct_estimate`, and `corroboration` return `todo!("M6")`. The per-frame cell-claim tracker (`TrustState`) is implemented — it records distinct div-sketch claims per frame hash, enforces anti-inflation via Jaccard dissimilarity checks, and caps storage at 4096 entries with FIFO eviction. The aggregation layer that distinguishes "10,000 virtual identities on 2 physical devices" from "10,000 real devices in distinct cells" is not yet built.
 
 ---
 
-## 5. Multi-Tier Broadcast Strategy
+## 📡 Multi-Tier Broadcast Strategy
 
-| Tier | Name | Latency / Range | Origination Gate | Relaying / Trust Gate |
-|---|---|---|---|---|
-| **Tier 1** | Local-Immediate | Instant (0-1 hop, ~30m) | Valid PoCP witness + ephemeral Ed25519 sig | Direct display to nearby devices (human ground truth verification). |
-| **Tier 2** | Regional-Propagated | Multi-hop flood (seconds) | Valid PoCP witness + ephemeral Ed25519 sig | Rebroadcast via Trickle algorithm ($K_{supp}$). Confidence scales only when verified by $\ge k$ distinct local cells. |
-| **Tier 3** | Private-Directed (v0 shipped) | End-to-end multi-hop | Out-of-band X25519 key exchange + VDL cost proof | Body is ChaCha20-Poly1305 ciphertext over the flood transport; relays carry it only with a valid VDL witness. |
+| Tier | Name | Range | Origination Gate | Relay / Trust Gate |
+|:---:|:---|:---|:---|:---|
+| **1** | Local-Immediate | 0–1 hop (~30m) | PoCP witness + Ed25519 sig | Direct display (human ground truth) |
+| **2** | Regional-Propagated | Multi-hop flood | PoCP witness + Ed25519 sig | Trickle rebroadcast. Confidence scales with distinct local cells. |
+| **3** | Private-Directed | E2E multi-hop | X25519 key exchange + VDL cost proof | ChaCha20-Poly1305 ciphertext over flood; relays require valid VDL witness. |
 
-**Tier-2 flood (v0)**: A TTL hop counter lives at `reserved[0]` (starts at 8, each relay decrements by 1, dies at 0). Deduplication by frame hash prevents rebroadcast storms: a relay that has already seen a frame hash drops it silently. The relay decision itself lives in `statemachine::relay_decision` in the Rust core — platform shims never make relay choices.
+### Tier-2 Flood
 
-**Tier-3 private (v0 implemented)**: Two devices pair out-of-band — each generates a long-term X25519 secret, exchanges public keys (paste/QR/paper), and both derive an identical pairwise key via `crypto::pair_derive` (X25519 DH → blake3 domain-separated). A private message seals its 64-byte body with ChaCha20-Poly1305 (`private::seal_private_body`): nonce = `epoch_be || mark[0..8]`, plaintext block `[len][utf-8 ≤47 bytes][zero pad]`. There is **no recipient address on the wire** — the receiver trial-decrypts every incoming private frame against each stored pair key; a tag match both selects the conversation and authenticates the sender. The frame carries `MsgType::Private` (wire byte 17 = 3).
+TTL hop counter at `reserved[0]` (starts at 8, each relay decrements, dies at 0). Deduplication by frame hash prevents storms. The relay decision lives in `statemachine::relay_decision` in the Rust core — platform shims never make relay choices.
 
-**Tier-3 DoS problem + VDL**: A private body is opaque to relays — they cannot inspect content, so without a cost function an attacker could flood the mesh with junk ciphertext that every node dutifully relays (denial of service). **VDL (Verifiable Delay Lottery)** = each private origination must carry a proof-of-work witness in the `pocp_wit` field: `blake3("mesh-core:v1:vdl" || frame[0..102] || witness)` must have ≥ `VDL_DIFFICULTY_BITS` (v0 = 22) leading zero bits. Finding the witness costs the sender seconds of CPU (`vdl::solve`, run off the UI thread); any relay verifies it with a **single hash** (`vdl::verify`) before carrying the frame. The witness lives inside the signed region, so it is bound to the frame. **Honest limitation:** v0 is parallelizable proof-of-work, not a sequential verifiable delay function — it bounds spam per unit of compute, not per unit of wall-clock time. A true sequential VDF can drop in behind the same `solve`/`verify` interface later. The name "Verifiable Delay Lottery" is this project's own term, kept for continuity.
+### Tier-3 Private Messaging
+
+Two devices pair out-of-band — each generates a long-term X25519 secret, exchanges public keys (paste/QR/paper), and both derive an identical pairwise key via `crypto::pair_derive` (X25519 DH → BLAKE3 domain-separated KDF).
+
+A private message seals its 64-byte body with ChaCha20-Poly1305 (`private::seal_private_body`): nonce = `epoch_be ∥ BLAKE3("mesh-core:v1:nonce" ∥ sender_pk ∥ counter_be)[..8]`, plaintext block `[len][utf-8 ≤47 bytes][zero pad]`.
+
+**No recipient address on the wire** — the receiver trial-decrypts every incoming private frame against each stored pair key; a tag match both selects the conversation and authenticates the sender. The frame carries `MsgType::Private` (wire byte 17 = 3).
+
+### Tier-3 DoS Protection (VDL)
+
+Private bodies are opaque to relays, so without a cost function an attacker could flood junk ciphertext. **VDL (Verifiable Delay Lottery)** requires each private origination to carry a proof-of-work witness: `BLAKE3("mesh-core:v1:vdl" ∥ frame[0..102] ∥ witness)` must have ≥ `VDL_DIFFICULTY_BITS` (22) leading zero bits. Finding the witness costs seconds of CPU (`vdl::solve`); any relay verifies it with a **single hash** (`vdl::verify`).
+
+> **Honest limitation:** v0 is parallelizable proof-of-work, not a sequential verifiable delay function — it bounds spam per unit of compute, not per unit of wall-clock time. A true sequential VDF can drop in behind the same `solve`/`verify` interface later.
 
 ---
 
-## 6. Mobile Platform Implementations & BLE Realities
+## 📱 Mobile Platform Implementations & BLE Realities
 
 ### BLE Transport Mode
-- Uses **BLE 5.0 Extended Advertising** (AUX_ADV_IND PDUs) on **LE Coded PHY** (for maximum range under crowded conditions).
+- Uses **BLE 5.0 Extended Advertising** (AUX_ADV_IND PDUs) on **LE Coded PHY** (maximum range under crowded conditions).
 - Packets are broadcast as non-connectable, undirected extended advertisements carrying the 226-byte payload.
 
 ### Android Shim
-- Utilizes `BluetoothLeAdvertiser` with extended advertising parameters and `BluetoothLeScanner` with low-latency filters.
-- Runs inside a Foreground Service with persistent notifications to survive Android Doze mode and OS process sweeps.
+- `BluetoothLeAdvertiser` with extended advertising + `BluetoothLeScanner` with low-latency filters.
+- Runs inside a Foreground Service with persistent notifications to survive Doze mode and OS process sweeps.
 
 ### iOS Shim & Background Constraints
-- Apple CoreBluetooth imposes heavy background constraints:
-  - Background peripheral mode strips local device names and moves service UUIDs into an undocumented **overflow area** readable only by other explicitly scanning iOS devices (Android devices cannot read overflow UUIDs).
-  - Background central mode suppresses non-connectable advertisements entirely.
-- *Architectural Accommodation*: iOS devices operate with connectable background advertisements when necessary, and the app prompts users to use active foreground mode during marches.
-- *Hardware Pocket-Beacon Relays*: To maintain an un-throttled mesh backbone unaffected by mobile OS background restrictions, small pocketable microcontrollers (nRF52840 or ESP32-C3) running `mesh-core` can act as dedicated mesh repeaters.
+- CoreBluetooth background mode strips local names and moves service UUIDs into an undocumented **overflow area** (readable only by other scanning iOS devices).
+- Background central mode suppresses non-connectable advertisements entirely.
+- **Accommodation:** Connectable background advertisements when necessary; prompts for active foreground mode during marches.
+- **Hardware Pocket-Beacon Relays:** Pocketable microcontrollers (nRF52840 or ESP32-C3) running `mesh-core` act as un-throttled mesh backbone repeaters.
 
 ---
 
-## 7. Non-Negotiable Security Invariants
+## 🔒 Non-Negotiable Security Invariants
 
-All contributors and maintainers must strictly enforce the following seven invariants:
-
-1. **One Codec in Rust**: Platform shims (Kotlin/Swift) must never parse or construct frame fields. They pass raw 226-byte arrays directly to `mesh-core`.
-2. **Parse -> Verify -> Decide -> Forward**: Processing order is fixed: `Length check -> Epoch window -> Mark unseen -> Signature verify -> Witness check -> State machine decision`.
-3. **Fixed 226-Byte Frame**: No variable-length fields, no compression, no optional headers. Deviation results in silent drop.
-4. **Danger-Only Alerts**: The public plane carries danger alerts only. Never transmit "safe" or "all clear" signals.
-5. **Ephemeral Keys & Minimal Persistence**: Identity keys rotate with the beacon chain (floor ~4 min real, epoch-duration in test). Storage automatically decays, and `panic_wipe()` immediately purges all state.
-6. **Unencrypted Public Plane**: The public plane is authenticated, not private. Never label it as E2E encrypted.
-7. **Physical Spatial Trust**: Trust is derived solely from physical cell corroboration, never accumulated identity reputation.
+| # | Invariant | Rationale |
+|:---:|:---|:---|
+| 1 | **One Codec in Rust** | Platform shims never parse or construct frames. Raw 226-byte arrays only. |
+| 2 | **Parse → Verify → Decide → Forward** | Fixed processing order: length → epoch → mark unseen → sig verify → witness → state machine |
+| 3 | **Fixed 226-Byte Frame** | No variable-length fields, no compression, no optional headers |
+| 4 | **Danger-Only Alerts** | Public plane carries danger only. Never transmit "safe" or "all clear". |
+| 5 | **Ephemeral Keys & Minimal Persistence** | Keys rotate with beacon chain. `panic_wipe()` purges all state immediately. |
+| 6 | **Unencrypted Public Plane** | Authenticated, not private. Never label it E2E encrypted. |
+| 7 | **Physical Spatial Trust** | Trust from physical cell corroboration only, never accumulated reputation. |
 
 ---
 
-## 8. Build & Verification
+## 🔧 Build & Verification
 
 ```bash
 # Navigate to core library
 cd mesh-core
 
-# Run test suite (crypto KATs, wire codec, and UniFFI round-trips)
+# Run full test suite (crypto KATs, wire codec, PoCP, beacon, private, VDL, statemachine)
 cargo test
 
 # Run linter checks
@@ -231,65 +262,83 @@ cargo +nightly fuzz run decode -- -max_total_time=60
 
 ### Debug App Parameters (the τ rig)
 
-The debug APK and laptop Rust client expose every tunable parameter and show live readouts. All values persist in Android SharedPreferences (`mesh_cfg`).
+The debug APK and laptop Rust client expose every tunable parameter with live readouts. All values persist in Android SharedPreferences (`mesh_cfg`).
 
 | Parameter | Default | What it controls |
-|---|---|---|
-| `epochMs` | `10000` (10 s) | Length of one measurement window. **All devices in a test run MUST use the same value** — epoch number = `unix-time-ms / epochMs`, so a mismatch causes epoch numbers to diverge and Jaccard comparisons to match the wrong windows. |
-| `tauThreshold` (τ) | `0.5` | Jaccard similarity cutoff. At or above = "same cell"; below = "different cell". This is the single most important calibration knob — tune it from real field measurements, not guesses. |
-| `rssiFloorDbm` | `-80` | Signal-strength floor in dBm. Frames heard weaker than this value are ignored when building the local KMV cell sketch, filtering out distant or van-grade observers. Closer to 0 = stricter: e.g. `-60` means only very near neighbors count toward your sketch. |
-| `advIntervalMs` | `1000` | How often the radio repeats the current advertisement (milliseconds). Lower = more visible to scanners, higher battery cost. |
-| `codedPhy` | `true` | BLE long-range mode (LE Coded PHY, S=8). Provides ~4× range over 1M PHY but requires Bluetooth 5 Coded PHY support on **both** ends. The laptop's Intel controller does NOT support Coded PHY — this is not a problem because 1M PHY is always scanned simultaneously, so leaving `codedPhy` on is safe in mixed deployments. |
+|:---|:---|:---|
+| `epochMs` | `10000` (10s) | Measurement window length. **All test devices must match.** Epoch = `unix-time-ms / epochMs`. |
+| `tauThreshold` (τ) | `0.5` | Jaccard similarity cutoff. ≥ τ = same cell. The single most important calibration knob. |
+| `rssiFloorDbm` | `-80` | Signal-strength floor (dBm). Filters distant observers from cell sketch. |
+| `advIntervalMs` | `1000` | BLE advertisement repeat interval (ms). Lower = more visible, higher battery cost. |
+| `codedPhy` | `true` | BLE long-range mode (LE Coded PHY, S=8). ~4× range, requires BT5 on both ends. |
 
-**Live readouts** shown by the debug UI:
+### Live Debug Readouts
 
-- **Epoch**: The current window number (`unix-time-ms / epochMs`). Verify all devices in a run show the same epoch number.
-- **Neighbors**: Count of distinct `markHex` values heard **this epoch** (after RSSI floor filter). This is your crowd density indicator for the current window.
-- **Total Rx**: All frames received since the app started, after frame-hash dedup. A monotonically rising counter.
-- **Sketch[0..3]**: The first 4 slots of the 16-slot KMV sketch for the current epoch. Slots showing `0xffff…` are empty padding (fewer than 16 distinct neighbors seen yet).
-- **Jaccard verdict line**: Displays the computed $J(A, B)$ against τ and whether the two sketches qualify as co-present.
+| Readout | Description |
+|:---|:---|
+| **Epoch** | Current window number. Verify all test devices show the same value. |
+| **Neighbors** | Distinct marks heard this epoch (after RSSI filter). Crowd density indicator. |
+| **Total Rx** | All frames received since app start, after frame-hash dedup. |
+| **Sketch[0..3]** | First 4 slots of the 16-slot KMV sketch. `0xffff…` = empty padding. |
+| **Jaccard verdict** | Computed $J(A,B)$ against τ and co-presence verdict. |
 
-**Export JSON fields** (tap "Export" to write `mesh_export.json`):
+### Export JSON Fields
 
-- `config` — the full `MeshConfig` settings at export time (`epochMs`, `tauThreshold`, `rssiFloorDbm`, `codedPhy`, `advIntervalMs`).
-- `heard[]` — one row per received frame:
-  - `epoch` — which window this frame arrived in.
-  - `markHex` — the sender's rotating 16-byte mark as a hex string. **This is NOT a stable device ID** — it rotates every epoch by design (derived from `blake3("mesh-core:v1:mark" || seed || epoch_le)[..16]`), so the same physical device appears under a different `markHex` each window.
-  - `rssi` — received signal strength in dBm. More negative = weaker / farther. Rough field guide: `~-40` = same desk, `~-60` = same room, `~-80` = across the street.
-  - `tsMs` — Unix timestamp in milliseconds when the frame was recorded.
+Tap "Export" to write `mesh_export.json`:
 
-**Body layout**: `body[0]` = length byte (0–63), `body[1..1+len]` = UTF-8 text, remainder zeroed. The Rust codec rejects any frame where the tail is not all-zero or the length byte exceeds 63.
+| Field | Description |
+|:---|:---|
+| `config` | Full `MeshConfig` at export time |
+| `heard[]` | One row per received frame |
+| `heard[].epoch` | Which window this frame arrived in |
+| `heard[].markHex` | Sender's rotating 16-byte mark (hex). **Not a stable device ID** — rotates every epoch. |
+| `heard[].rssi` | Signal strength (dBm). `-40` = same desk, `-60` = same room, `-80` = across the street. |
+| `heard[].tsMs` | Unix timestamp (ms) |
 
-**Frame hash and epoch re-appearance**: The frame-hash dedup key is `blake3(buf[0..214])[..16]` — it covers everything except the hop-mutable `reserved` region. Each new epoch produces a **new** signed frame (different `epoch` field, different `mark`), so the same message text will legitimately re-appear in the `heard[]` log each epoch — it is a distinct frame, not a rebroadcast storm.
+**Body layout:** `body[0]` = length byte (0–63), `body[1..1+len]` = UTF-8 text, remainder zeroed. The codec rejects frames where the tail is not all-zero or length exceeds 63.
+
+**Frame hash dedup key:** `blake3(buf[0..214])[..16]` — covers everything except the hop-mutable `reserved` region. Same text re-originated in a new epoch gets a new hash (different `epoch` + `mark` fields), so it legitimately re-appears in `heard[]`.
 
 ---
 
-## 9. Glossary of Terms
+## 📖 Glossary
 
-* **Advertising Interval** (`advIntervalMs`): How often the BLE radio repeats the current advertisement frame. Default 1000 ms. Shorter intervals make the node more visible to scanners at the cost of battery. Does not affect frame content or epoch timing.
-* **AUX PDU (Auxiliary Packet Data Unit)**: In BLE 5 Extended Advertising, additional payload bytes (up to 255 B per packet) offloaded from the primary 31-byte legacy channels (channels 37, 38, 39) onto secondary data channels (channels 0–36).
-* **BLAKE3**: An extremely fast, cryptographic hash function used in `cockroachat` for key derivation (`KDF`), mark hashing, KMV sketching, and beacon seed chaining.
-* **Bridgefy Class Vulnerabilities**: A category of protocol design flaws documented in 2021/2022 security audits where mesh nodes relayed unparsed payloads (causing parsing crashes / zip bombs), relied on virtual identities (vulnerable to Sybil attacks), or allowed passive location tracking.
-* **CellMismatch Alarm**: An internal security event generated when a received message claims a Proof-of-Co-Presence witness that fails to match the receiving device's locally observed physical cell (indicating a packet replay or relocation attack).
-* **Chained Epoch Beacon**: A self-clocking, forward-unpredictable random seed generator where the seed for epoch $N$ is derived via $seed_N = \text{BLAKE3}(seed_{N-1} \parallel E_N)$. Prevents attackers from pre-computing future seeds or building offline surveillance tracking dictionaries.
-* **Diversity Sketch**: A K-Minimum Values (KMV) sketch constructed solely from *distinct, locally-verified* physical cell digests. Used to determine how many independent geographic locations have corroborated a danger alert.
-* **Ed25519 Ephemeral Signature**: An elliptic-curve signature scheme using public-key cryptography where keys rotate automatically every hour (`Ephemeral`), preventing long-term tracking of user devices.
-* **Epoch ($T_{epoch}$)**: A fixed time window (typically 5 minutes) during which devices sample local ambient marks, compute cell sketches, and sync beacon state.
-* **Epoch Skew**: A condition where two devices compute different epoch numbers for the same wall-clock moment — caused by clock drift between devices or by different `epochMs` settings. Epoch-skewed devices build sketches over non-overlapping windows, making Jaccard comparison meaningless. The debug app flags it when received frames carry an epoch number that differs from the local current epoch.
-* **Frame Hash (dedup key)**: `blake3(buf[0..214])[..16]` — a 16-byte digest of everything in the frame except the hop-mutable `reserved` region. Relays store seen frame hashes and drop any frame whose hash has already been processed, preventing rebroadcast storms. Because the hash covers the `epoch` and `mark` fields, a legitimately re-originated frame (new epoch, new mark) gets a new hash and is not suppressed.
-* **Jaccard Distance ($\tau$)**: A mathematical measure of similarity between two sets $A$ and $B$, defined as $J(A, B) = \frac{|A \cap B|}{|A \cup B|}$. In `cockroachat`, $J(A, B) \ge \tau$ determines whether two devices are physically co-present in the same cell.
-* **KMV Sketch (K-Minimum Values)**: A probabilistic data structure that retains the $K$ smallest hash values of an observed dataset. Allows devices to compare physical cell composition in constant memory without transmitting raw observation lists.
-* **LE Coded PHY**: A physical layer option introduced in Bluetooth 5 that uses Forward Error Correction (FEC) (S=2 or S=8) to quadruple radio range at the expense of lower data throughput.
-* **Local Ambient Mark**: A 16-byte pseudo-random identifier emitted by nearby devices in non-propagating local broadcasts, sampled by nearby nodes to construct physical cell sketches.
-* **Overflow Area (iOS CoreBluetooth)**: A special Apple-proprietary hashing mechanism used when an iOS app advertises service UUIDs in the background. Accessible only by other iOS devices explicitly scanning for those exact service UUIDs, rendering the advertisement invisible to Android background scanners.
-* **Parse-Before-Forward**: A strict architectural invariant requiring every incoming packet to be completely decoded, length-checked, epoch-verified, signature-authenticated, and witness-checked before any decision is made to relay or display it.
-* **Proof-of-Co-Presence (PoCP)**: A cryptographic protocol proving that a node was physically present in a specific crowd cell at a specific time by demonstrating knowledge of the ambient RF observations of that cell.
-* **RSSI (Received Signal Strength Indicator)**: A measure of the power of a received radio signal, reported in dBm (decibels relative to one milliwatt). The scale is negative: 0 dBm = 1 mW (very strong), −40 dBm = same desk, −60 dBm = same room, −80 dBm = across the street. Weaker (more negative) values indicate greater distance or obstruction. `cockroachat` uses `rssiFloorDbm` to discard frames below a configurable threshold so that distant nodes do not pollute the local cell sketch.
-* **Spacetime Witness**: A short message authentication code ($MAC_{KDF(cell \parallel seed)}(msg)$) embedded in a frame that authenticates a message against a specific physical cell sketch and epoch seed.
-* **Trickle Algorithm**: A self-regulating, epidemic broadcast algorithm (RFC 6206) that adjusts retransmission intervals based on local network density ($K_{supp}$), preventing broadcast storms while ensuring rapid propagation over multi-hop networks.
-* **TTL (Time-To-Live / hop budget)**: Stored at `reserved[0]`. Starts at 8 for Tier-2 frames. Each relay decrements it by 1 before rebroadcasting; a frame with TTL = 0 is not relayed further (it dies at the current node). Stored in the unsigned `reserved` region so relays can decrement without invalidating the Ed25519 signature.
-* **UniFFI**: Mozilla’s multi-language binding generator tool used to expose the Rust `mesh-core` interface cleanly to Kotlin (Android) and Swift (iOS) shims.
-* **VDL (Verifiable Delay Lottery)**: This project’s own term (not an external standard) for the Tier-3 origination cost gate. Each private-message origination must carry a witness in `pocp_wit` such that `blake3("mesh-core:v1:vdl" || frame[0..102] || witness)` has at least `VDL_DIFFICULTY_BITS` (v0 = 22) leading zero bits. Producing it costs the sender seconds of CPU (`vdl::solve`); any node verifies it with one hash (`vdl::verify`). This rate-limits how fast a single sender can inject opaque private frames into the mesh without requiring identity, accounts, or any trusted third party. **v0 is parallelizable proof-of-work, not a true sequential VDF** — it bounds spam per unit of compute, not per unit of wall-clock time; a sequential VDF can replace it behind the same interface later. Implemented in `mesh-core/src/vdl.rs`.
-* **Pairwise Key (Tier-3 pairing)**: The symmetric key two devices share for private messaging. Each device holds a long-term X25519 secret (32 OS-random bytes, never leaves the device); they exchange public keys out-of-band (paste/QR/paper) and both compute the same key via `crypto::pair_derive` = blake3-domain-separated X25519 Diffie-Hellman. There is no recipient address on the wire — receivers trial-decrypt against every stored pairwise key, and a successful ChaCha20-Poly1305 tag check both selects the conversation and authenticates the sender.
-* **Unsigned Hop-Mutable Region**: The final 12 bytes of the 226-byte frame (`reserved`), containing mutable metrics like TTL and hop count. Excluded from the Ed25519 signature so relays can decrement TTL without invalidating signatures.
+<details>
+<summary><strong>Click to expand full glossary (25 terms)</strong></summary>
 
+| Term | Definition |
+|:---|:---|
+| **Advertising Interval** | How often the BLE radio repeats the current advertisement frame. Default 1000 ms. |
+| **AUX PDU** | BLE 5 Extended Advertising auxiliary payload (up to 255 B) offloaded onto secondary data channels. |
+| **BLAKE3** | Fast cryptographic hash used for KDF, mark hashing, KMV sketching, and beacon seed chaining. |
+| **Bridgefy Class Vulnerabilities** | Protocol design flaws from 2021/2022 audits: unparsed relay, Sybil-vulnerable identity, location tracking. |
+| **CellMismatch Alarm** | Security event when a PoCP witness fails to match the receiver's local cell sketch. |
+| **Chained Epoch Beacon** | Forward-unpredictable seed generator: $seed_N = \text{BLAKE3}(seed_{N-1} \parallel E_N)$. |
+| **Diversity Sketch** | KMV sketch from distinct, locally-verified physical cell digests. |
+| **Ed25519 Ephemeral Signature** | Elliptic-curve signature with keys rotating via the beacon chain for forward secrecy. |
+| **Epoch ($T_{epoch}$)** | Fixed time window for mark sampling, sketch computation, and beacon sync. |
+| **Epoch Skew** | Different epoch numbers at the same wall-clock time from clock drift or `epochMs` mismatch. |
+| **Frame Hash** | `blake3(buf[0..214])[..16]` — dedup key covering all signed fields. |
+| **Jaccard Distance (τ)** | $J(A,B) = \|A \cap B\| / \|A \cup B\|$. ≥ τ = co-present in the same cell. |
+| **KMV Sketch** | Probabilistic data structure retaining K smallest hash values for constant-memory set comparison. |
+| **LE Coded PHY** | BLE 5 physical layer with FEC (S=8) for ~4× range at lower throughput. |
+| **Local Ambient Mark** | 16-byte pseudo-random ID from nearby devices in non-propagating broadcasts. |
+| **Overflow Area** | Apple-proprietary CoreBluetooth background service UUID hashing, invisible to Android scanners. |
+| **Pairwise Key** | Symmetric key from X25519 DH + BLAKE3 domain-separated KDF for Tier-3 private messaging. |
+| **Parse-Before-Forward** | Invariant: decode, verify, authenticate before any relay or display decision. |
+| **PoCP** | Proof-of-Co-Presence: cryptographic proof of physical presence via ambient RF observation. |
+| **RSSI** | Received signal strength (dBm). -40 = same desk, -60 = same room, -80 = across the street. |
+| **Spacetime Witness** | MAC embedding in frame that authenticates against a specific cell sketch and epoch seed. |
+| **Trickle Algorithm** | Self-regulating epidemic broadcast (RFC 6206) with density-adaptive retransmission. |
+| **TTL** | Hop budget at `reserved[0]`. Starts at 8, decremented per relay, dies at 0. |
+| **UniFFI** | Mozilla's binding generator exposing Rust `mesh-core` to Kotlin and Swift shims. |
+| **VDL** | Verifiable Delay Lottery — project-specific Tier-3 cost gate. 22-bit PoW, single-hash verify. v0 is parallelizable PoW, not sequential VDF. |
+
+</details>
+
+---
+
+<div align="center">
+<sub>Built for protesters. No accounts. No servers. No internet. Just mesh.</sub>
+</div>
+]]>
