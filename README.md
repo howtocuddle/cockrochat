@@ -19,7 +19,7 @@ During protests, civil demonstrations, or natural disasters, cellular networks a
 
 ### Key Highlights
 - **100% Offline & Serverless**: Works entirely over Bluetooth Low Energy (BLE 5.0).
-- **Anti-Fake Alert Protection**: Uses physical presence checks ("Proof-of-Co-Presence") so remote actors outside the crowd cannot inject false alerts or panic.
+- **Anti-Fake Alert Protection & Spatial Diversity**: Uses physical presence checks ("Proof-of-Co-Presence") and multi-cell spatial diversity so remote actors outside the crowd cannot inject false alerts or fake consensus.
 - **Self-Destructing Identity**: Keys auto-rotate continuously. If a phone is seized, past messages and location history remain unrecoverable.
 - **Crash-Proof Rust Core**: Every packet is parsed and verified in memory-safe Rust before forwarding, preventing crash-attacks (zip bombs).
 - **Danger-Only Alerts**: The public mesh strictly carries danger signals (e.g. teargas, police kettling, medical emergency). Silence is never assumed to mean safety.
@@ -66,7 +66,7 @@ The protocol uses a 3-tier messaging model to balance latency, crowd coverage, a
 ### Tier Summary
 
 1. **Tier 1 — Immediate Local Alerts (~30m)**: Instant alerts broadcasted to people right next to you.
-2. **Tier 2 — Crowd-Relayed Regional Alerts**: Multi-hop alerts propagated through the mesh. Re-broadcast frequency automatically adjusts to crowd density.
+2. **Tier 2 — Crowd-Relayed Regional Alerts**: Multi-hop alerts propagated through the mesh. Confidence scales through **Spatial Diversity** (corroboration across distinct physical crowd cells). Re-broadcast frequency automatically adjusts to crowd density via Trickle.
 3. **Tier 3 — Encrypted Direct Messages**: Pairwise private messages between trusted contacts with built-in spam protection (Proof-of-Work).
 
 ---
@@ -144,6 +144,7 @@ This glossary explains technical terms and protocol concepts used throughout `co
 - **Parse-Before-Forward**: The security rule requiring every packet to be fully validated in Rust before being displayed or relayed.
 - **Proof-of-Co-Presence (PoCP)**: A cryptographic mechanism verifying that a message originated from someone physically present in the crowd cell.
 - **RSSI (Received Signal Strength Indicator)**: A measurement of signal power (in dBm). Closer devices show higher RSSI values (e.g. -40 dBm), while distant devices show lower values (e.g. -80 dBm).
+- **Spatial Diversity**: A security mechanism where alert confidence scales based on corroboration from distinct physical geographic cells (ambient RF observations), ignoring remote virtual identity counts (Sybil attacks).
 - **Trickle Algorithm**: An epidemic broadcast algorithm (RFC 6206) that adjusts retransmission intervals based on crowd density to conserve battery and bandwidth.
 - **TTL (Time-To-Live)**: A hop counter on packets. Each relay decrements TTL by 1; when it reaches 0, the packet stops propagating.
 - **UniFFI**: Mozilla's multi-language binding generator used to connect the Rust core cleanly to Kotlin (Android) and Swift (iOS).
