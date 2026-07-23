@@ -1,4 +1,4 @@
-# 🪳 cockroachat
+# cockroachat
 
 **Offline Decentralized Mesh Messaging for Protests & Emergencies**
 
@@ -11,22 +11,22 @@
 
 ---
 
-## 🌟 What is cockroachat?
+## What is cockroachat?
 
 During protests, civil demonstrations, or natural disasters, cellular networks and Wi-Fi are frequently jammed, monitored, or shut down. 
 
 **cockroachat** turns nearby smartphones into a resilient, self-healing peer-to-peer mesh network. Devices pass short emergency alerts phone-to-phone through the crowd automatically.
 
 ### Key Highlights
-- 📵 **100% Offline & Serverless**: Works entirely over Bluetooth Low Energy (BLE 5.0).
-- 🛡️ **Anti-Fake Alert Protection**: Uses physical presence checks ("Proof-of-Co-Presence") so remote actors outside the crowd cannot inject false alerts or panic.
-- 🔑 **Self-Destructing Identity**: Keys auto-rotate continuously. If a phone is seized, past messages and location history remain unrecoverable.
-- ⚡ **Crash-Proof Rust Core**: Every packet is parsed and verified in memory-safe Rust before forwarding, preventing crash-attacks (zip bombs).
-- 🚨 **Danger-Only Alerts**: The public mesh strictly carries danger signals (e.g. teargas, police kettling, medical emergency). Silence is never assumed to mean safety.
+- **100% Offline & Serverless**: Works entirely over Bluetooth Low Energy (BLE 5.0).
+- **Anti-Fake Alert Protection**: Uses physical presence checks ("Proof-of-Co-Presence") so remote actors outside the crowd cannot inject false alerts or panic.
+- **Self-Destructing Identity**: Keys auto-rotate continuously. If a phone is seized, past messages and location history remain unrecoverable.
+- **Crash-Proof Rust Core**: Every packet is parsed and verified in memory-safe Rust before forwarding, preventing crash-attacks (zip bombs).
+- **Danger-Only Alerts**: The public mesh strictly carries danger signals (e.g. teargas, police kettling, medical emergency). Silence is never assumed to mean safety.
 
 ---
 
-## 📱 Platform Support
+## Platform Support
 
 | Component | Platform | Details |
 |:---|:---|:---|
@@ -36,7 +36,7 @@ During protests, civil demonstrations, or natural disasters, cellular networks a
 
 ---
 
-## 🏗️ Architecture & How It Works
+## Architecture & How It Works
 
 The system separates platform-specific radio hardware from security logic. All security rules live in the shared Rust core.
 
@@ -62,25 +62,25 @@ The system separates platform-specific radio hardware from security logic. All s
 
 ---
 
-## 📊 Implementation Status (v0)
+## Implementation Status (v0)
 
 | Module | Description | Status | Tests |
 |:---|:---|:---:|:---:|
-| **`codec`** | Zero-allocation fixed 226-byte packet encoder/decoder | ✅ Implemented | 9 |
-| **`crypto`** | Ephemeral Ed25519 signing, BLAKE3 KDF, X25519 DH, ChaCha20 AEAD | ✅ Implemented | 8 |
-| **`message`** | Public danger alert & private message frame generator | ✅ Implemented | 19 |
-| **`pocp`** | Physical proximity verification (Proof-of-Co-Presence) | ✅ Implemented | 18 |
-| **`beacon`** | Self-clocking key rotation & forward secrecy beacon | ✅ Implemented | 13 |
-| **`private`** | Tier-3 encrypted direct messaging with epoch nonces | ✅ Implemented | 6 |
-| **`vdl`** | Proof-of-work cost gate for spam protection | ✅ Implemented | 5 |
-| **`statemachine`** | Packet processing, relay decisions, and deduplication | ✅ Implemented | 12 |
-| **`trust`** | Multi-cell crowd corroboration aggregator | 🔲 In Progress (M6) | 5 |
-| **`store`** | Memory-bounded message buffer & instant panic wipe | ✅ Implemented | — |
-| **`ffi`** | Language bindings for Android (Kotlin) & iOS (Swift) | ✅ Implemented | 9 |
+| **`codec`** | Zero-allocation fixed 226-byte packet encoder/decoder | Implemented | 9 |
+| **`crypto`** | Ephemeral Ed25519 signing, BLAKE3 KDF, X25519 DH, ChaCha20 AEAD | Implemented | 8 |
+| **`message`** | Public danger alert & private message frame generator | Implemented | 19 |
+| **`pocp`** | Physical proximity verification (Proof-of-Co-Presence) | Implemented | 18 |
+| **`beacon`** | Self-clocking key rotation & forward secrecy beacon | Implemented | 13 |
+| **`private`** | Tier-3 encrypted direct messaging with epoch nonces | Implemented | 6 |
+| **`vdl`** | Proof-of-work cost gate for spam protection | Implemented | 5 |
+| **`statemachine`** | Packet processing, relay decisions, and deduplication | Implemented | 12 |
+| **`trust`** | Multi-cell crowd corroboration aggregator | In Progress (M6) | 5 |
+| **`store`** | Memory-bounded message buffer & instant panic wipe | Implemented | — |
+| **`ffi`** | Language bindings for Android (Kotlin) & iOS (Swift) | Implemented | 9 |
 
 ---
 
-## 🛡️ Key Security Guarantees
+## Key Security Guarantees
 
 1. **Parse-Before-Forward**: Incoming data is validated in memory-safe Rust before any decision is made to display or relay it.
 2. **Fixed 226-Byte Packet**: No variable lengths, no compression, zero room for buffer overflow or zip-bomb attacks.
@@ -89,7 +89,7 @@ The system separates platform-specific radio hardware from security logic. All s
 
 ---
 
-## 🔧 Developer Quick Start
+## Developer Quick Start
 
 ```bash
 # Clone the repository
@@ -109,7 +109,7 @@ cargo run
 
 ---
 
-## 📚 Technical Glossary
+## Technical Glossary
 
 This glossary explains technical terms and protocol concepts used throughout `cockroachat`.
 
@@ -120,7 +120,7 @@ This glossary explains technical terms and protocol concepts used throughout `co
 - **Ed25519**: A public-key signature scheme used to verify message authenticity without revealing private identity.
 - **Ephemeral Keys**: Temporary encryption/signing keys that rotate automatically, ensuring past communications remain secure even if a device is later inspected.
 - **Forward Secrecy**: A security property guaranteeing that compromised current keys cannot be used to decrypt past session data.
-- **Panic Wipe**: A emergency function that immediately zero-fills and purges all in-memory cryptographic keys and stored messages.
+- **Panic Wipe**: An emergency function that immediately zero-fills and purges all in-memory cryptographic keys and stored messages.
 - **Proof-of-Work (PoW) / VDL**: Verifiable Delay Lottery — a brief computational task required before sending private messages to prevent spammers from flooding the network.
 - **X25519**: A Diffie-Hellman key exchange algorithm enabling two devices to establish a shared secret key out-of-band (e.g. via QR code).
 
