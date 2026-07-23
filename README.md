@@ -36,25 +36,34 @@ During protests, civil demonstrations, or natural disasters, cellular networks a
 
 ---
 
-## Architecture & How It Works
+## Architecture & 3-Tier Messaging Model
 
-The system separates platform-specific radio hardware from security logic. All security rules live in the shared Rust core.
+The protocol uses a 3-tier messaging model to balance latency, crowd coverage, and security:
 
 ```
-       ┌─────────────────────────────────────────────────────────────┐
-       │                   Rust Core (mesh-core)                     │
-       │  Codec • Crypto • Physical Presence • Epoch Beacon • Trust  │
-       └──────────────────────────────▲──────────────────────────────┘
-                                      │ UniFFI / Direct Link
-                ┌─────────────────────┴─────────────────────┐
-                │                                           │
-      ┌─────────┴───────────┐                     ┌─────────┴───────────┐
-      │ Android Shim        │                     │ Linux Laptop Node   │
-      │ (Kotlin + BLE 5)    │                     │ (Rust + BlueZ)      │
-      └─────────────────────┘                     └─────────────────────┘
++-------------------------------------------------------------------------------+
+|                       3-Tier Messaging Architecture                           |
++-------------------------------------------------------------------------------+
+
+  Tier 1: Immediate Local Broadcast (~30m Radius)
+  [ Sender ] ---> (BLE Extended Adv) ---> [ Nearby Nodes ]
+   * 1-Hop direct proximity broadcast for immediate danger ground truth.
+   * Authenticated by Proof-of-Co-Presence (PoCP) physical witness.
+
+  Tier 2: Multi-Hop Regional Mesh Flood
+  [ Sender ] ---> [ Relay Node 1 ] ---> [ Relay Node 2 ] ---> [ Crowd Mesh ]
+   * Multi-hop flood re-broadcasted through the crowd.
+   * Density-adaptive Trickle algorithm, Frame Hash dedup & TTL limits.
+
+  Tier 3: Encrypted Direct Private Message
+  [ Sender ] ================================================> [ Recipient ]
+   * End-to-end encrypted pairwise message (ChaCha20-Poly1305).
+   * Gated by Proof-of-Work (VDL witness) to prevent network spam.
+
++-------------------------------------------------------------------------------+
 ```
 
-### Simple 3-Tier Messaging Model
+### Tier Summary
 
 1. **Tier 1 — Immediate Local Alerts (~30m)**: Instant alerts broadcasted to people right next to you.
 2. **Tier 2 — Crowd-Relayed Regional Alerts**: Multi-hop alerts propagated through the mesh. Re-broadcast frequency automatically adjusts to crowd density.
