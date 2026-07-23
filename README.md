@@ -42,31 +42,42 @@ Phones relay short **danger alerts** over Bluetooth Low Energy (BLE 5.0 Extended
 
 ## 2. Architecture & Module Design
 
-All security-critical logic (codec parsing, cryptography, Proof-of-Co-Presence, beacon chaining, trust aggregation, and protocol state machine) resides in a single, memory-safe Rust core (`mesh-core`). Platform shims in Kotlin (Android) and Swift (iOS) are thin layers responsible **only** for radio hardware I/O, OS background lifecycles, UI rendering, and secure key storage.
+All security-critical logic (codec parsing, cryptography, Proof-of-Co-Presence, beacon chaining, trust aggregation, and protocol state machine) resides in a single, memory-safe Rust core (`mesh-core`). Platform shims in Kotlin (Android) and Swift (iOS) are thin layers responsible **only** for radio hardware I/O, OS background lifecycles, UI rendering, and secure key storage. A Linux laptop client (`laptop/`) links the same `mesh-core` crate directly for desktop testing via BlueZ.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                            Rust Core (mesh-core)                            │
 │ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────┐ ┌───────────┐ │
 │ │  codec   │ │  crypto  │ │   pocp   │ │  beacon  │ │ trust │ │statemach. │ │
+│ ├──────────┤ ├──────────┤ ├──────────┤ ├──────────┤ ├───────┤ ├───────────┤ │
+│ │ message  │ │ private  │ │   vdl    │ │  store   │ │  ffi  │ │  radio    │ │
 │ └──────────┘ └──────────┘ └──────────┘ └──────────┘ └───────┘ └───────────┘ │
 └──────────────────────▲───────────────────────────────▲──────────────────────┘
-                       │ UniFFI (Generated Bindings)   │
-           ┌───────────┴──────────┐        ┌────────────┴──────────┐
-           │ Android Shim         │        │ iOS Shim              │
-           │ (Kotlin + BLE 5)     │        │ (Swift + CoreBluetooth)│
+                       │ UniFFI (Generated Bindings)   │ Direct Rust link
+           ┌───────────┴──────────┐        ┌───────────┴───────────┐
+           │ Android Shim         │        │ Laptop Client          │
+           │ (Kotlin + BLE 5)     │        │ (Rust + BlueZ/bluer)   │
            └──────────────────────┘        └───────────────────────┘
 ```
 
 ### Rust Core (`mesh-core`) Modules
 
 * **`codec`**: Zero-allocation, non-panicking, fixed-offset 226-byte encoder/decoder. Strict total-failure semantics: any byte-length deviation or malformed header results in immediate drop with zero side effects.
-* **`crypto`**: Ephemeral Ed25519 signature scheme with beacon-rotating keys (forward secrecy via chained beacon seed), domain-separated hashing (BLAKE3), and ChaCha20-Poly1305 AEAD routines.
+* **`crypto`**: Ephemeral Ed25519 signature scheme with beacon-rotating keys (forward secrecy via chained beacon seed), domain-separated hashing (BLAKE3), X25519 Diffie-Hellman key exchange, and ChaCha20-Poly1305 AEAD routines.
+* **`message`**: Single origination path for all signed frames. Derives per-epoch marks from the beacon seed, builds the wire frame, and provides `body_text` / `frame_hash` accessors.
 * **`pocp`**: Proof-of-Co-Presence engine. Constructs K-Minimum Values (KMV) fuzzy sketches from overheard ambient BLE marks, evaluates Jaccard similarity ($\tau$), and verifies spacetime witnesses ($MAC_{KDF(cell \parallel seed)}(msg)$).
 * **`beacon`**: Self-clocking, chained hash beacon. Computes dynamic epoch seeds using locally observed non-propagating mark entropy and enforces acceleration floor constraints.
 * **`trust`**: Spatial diversity aggregator. Tracks distinct, locally verified physical cell digests and flags spatial anomalies (`CellMismatch` relocation alarms).
-* **`statemachine`**: Core packet processing engine. Controls seen-set Bloom filters, Trickle suppression timers ($K_{supp}$, $W$, RSSI slot biasing), TTL/hop management, and alert dispatch.
+* **`statemachine`**: Core packet processing engine. Controls seen-set dedup (time-decaying hash map), Trickle suppression timers ($K_{supp}$, $W$, RSSI slot biasing), TTL/hop management, and alert dispatch.
+* **`private`**: Tier-3 private messaging. Seals/opens 64-byte message bodies with ChaCha20-Poly1305 AEAD using pairwise keys derived via `crypto::pair_derive`. Nonces are constructed from epoch + mark prefix to prevent reuse.
+* **`vdl`**: Verifiable Delay Lottery. Proof-of-work cost gate for Tier-3 private frames — `solve` finds a witness with ≥ `VDL_DIFFICULTY_BITS` leading zero bits; `verify` checks it with a single BLAKE3 hash.
 * **`store`**: Size-capped, memory-bounded persistent storage with automated auto-decay and hardware panic-wipe capabilities.
+* **`ffi`**: UniFFI-exported interface consumed by the Android Kotlin shim (and future iOS Swift shim).
+* **`radio`**: Trait definition (`RadioPort`) for the BLE transport seam implemented by each platform shim.
+
+### Laptop Client (`laptop/`)
+
+A Linux desktop mesh node built on `bluer` (BlueZ async bindings) and `tokio`. Links `mesh-core` directly (no UniFFI). Advertises via BLE Extended Advertising (1M PHY), scans for peers, computes per-epoch KMV sketches, and accepts interactive text input from stdin. Useful for protocol debugging without a phone.
 
 ---
 
@@ -164,7 +175,7 @@ To maximize transmission reliability over BLE Extended Advertising without fragm
 
 ### BLE Transport Mode
 - Uses **BLE 5.0 Extended Advertising** (AUX_ADV_IND PDUs) on **LE Coded PHY** (for maximum range under crowded conditions).
-- Packets are broadcast as non-connectable, undirected extended advertisements carrying the 194-byte payload.
+- Packets are broadcast as non-connectable, undirected extended advertisements carrying the 226-byte payload.
 
 ### Android Shim
 - Utilizes `BluetoothLeAdvertiser` with extended advertising parameters and `BluetoothLeScanner` with low-latency filters.
@@ -183,9 +194,9 @@ To maximize transmission reliability over BLE Extended Advertising without fragm
 
 All contributors and maintainers must strictly enforce the following seven invariants:
 
-1. **One Codec in Rust**: Platform shims (Kotlin/Swift) must never parse or construct frame fields. They pass raw 194-byte arrays directly to `mesh-core`.
+1. **One Codec in Rust**: Platform shims (Kotlin/Swift) must never parse or construct frame fields. They pass raw 226-byte arrays directly to `mesh-core`.
 2. **Parse -> Verify -> Decide -> Forward**: Processing order is fixed: `Length check -> Epoch window -> Mark unseen -> Signature verify -> Witness check -> State machine decision`.
-3. **Fixed 194-Byte Frame**: No variable-length fields, no compression, no optional headers. Deviation results in silent drop.
+3. **Fixed 226-Byte Frame**: No variable-length fields, no compression, no optional headers. Deviation results in silent drop.
 4. **Danger-Only Alerts**: The public plane carries danger alerts only. Never transmit "safe" or "all clear" signals.
 5. **Ephemeral Keys & Minimal Persistence**: Identity keys rotate with the beacon chain (floor ~4 min real, epoch-duration in test). Storage automatically decays, and `panic_wipe()` immediately purges all state.
 6. **Unencrypted Public Plane**: The public plane is authenticated, not private. Never label it as E2E encrypted.
@@ -214,7 +225,7 @@ cargo run --bin uniffi-bindgen -- generate --library target/release/libmesh_core
 cargo run --bin uniffi-bindgen -- generate --library target/release/libmesh_core.so \
     --language swift  --out-dir bindings/swift
 
-# Fuzz the 194-byte parser boundary (Nightly toolchain required)
+# Fuzz the 226-byte parser boundary (Nightly toolchain required)
 cargo +nightly fuzz run decode -- -max_total_time=60
 ```
 
@@ -249,7 +260,7 @@ The debug APK and laptop Rust client expose every tunable parameter and show liv
 
 **Body layout**: `body[0]` = length byte (0–63), `body[1..1+len]` = UTF-8 text, remainder zeroed. The Rust codec rejects any frame where the tail is not all-zero or the length byte exceeds 63.
 
-**Frame hash and epoch re-appearance**: The frame-hash dedup key is `blake3(buf[0..182])[..16]` — it covers everything except the hop-mutable `reserved` region. Each new epoch produces a **new** signed frame (different `epoch` field, different `mark`), so the same message text will legitimately re-appear in the `heard[]` log each epoch — it is a distinct frame, not a rebroadcast storm.
+**Frame hash and epoch re-appearance**: The frame-hash dedup key is `blake3(buf[0..214])[..16]` — it covers everything except the hop-mutable `reserved` region. Each new epoch produces a **new** signed frame (different `epoch` field, different `mark`), so the same message text will legitimately re-appear in the `heard[]` log each epoch — it is a distinct frame, not a rebroadcast storm.
 
 ---
 
@@ -265,7 +276,7 @@ The debug APK and laptop Rust client expose every tunable parameter and show liv
 * **Ed25519 Ephemeral Signature**: An elliptic-curve signature scheme using public-key cryptography where keys rotate automatically every hour (`Ephemeral`), preventing long-term tracking of user devices.
 * **Epoch ($T_{epoch}$)**: A fixed time window (typically 5 minutes) during which devices sample local ambient marks, compute cell sketches, and sync beacon state.
 * **Epoch Skew**: A condition where two devices compute different epoch numbers for the same wall-clock moment — caused by clock drift between devices or by different `epochMs` settings. Epoch-skewed devices build sketches over non-overlapping windows, making Jaccard comparison meaningless. The debug app flags it when received frames carry an epoch number that differs from the local current epoch.
-* **Frame Hash (dedup key)**: `blake3(buf[0..182])[..16]` — a 16-byte digest of everything in the frame except the hop-mutable `reserved` region. Relays store seen frame hashes and drop any frame whose hash has already been processed, preventing rebroadcast storms. Because the hash covers the `epoch` and `mark` fields, a legitimately re-originated frame (new epoch, new mark) gets a new hash and is not suppressed.
+* **Frame Hash (dedup key)**: `blake3(buf[0..214])[..16]` — a 16-byte digest of everything in the frame except the hop-mutable `reserved` region. Relays store seen frame hashes and drop any frame whose hash has already been processed, preventing rebroadcast storms. Because the hash covers the `epoch` and `mark` fields, a legitimately re-originated frame (new epoch, new mark) gets a new hash and is not suppressed.
 * **Jaccard Distance ($\tau$)**: A mathematical measure of similarity between two sets $A$ and $B$, defined as $J(A, B) = \frac{|A \cap B|}{|A \cup B|}$. In `cockroachat`, $J(A, B) \ge \tau$ determines whether two devices are physically co-present in the same cell.
 * **KMV Sketch (K-Minimum Values)**: A probabilistic data structure that retains the $K$ smallest hash values of an observed dataset. Allows devices to compare physical cell composition in constant memory without transmitting raw observation lists.
 * **LE Coded PHY**: A physical layer option introduced in Bluetooth 5 that uses Forward Error Correction (FEC) (S=2 or S=8) to quadruple radio range at the expense of lower data throughput.
@@ -280,5 +291,5 @@ The debug APK and laptop Rust client expose every tunable parameter and show liv
 * **UniFFI**: Mozilla’s multi-language binding generator tool used to expose the Rust `mesh-core` interface cleanly to Kotlin (Android) and Swift (iOS) shims.
 * **VDL (Verifiable Delay Lottery)**: This project’s own term (not an external standard) for the Tier-3 origination cost gate. Each private-message origination must carry a witness in `pocp_wit` such that `blake3("mesh-core:v1:vdl" || frame[0..102] || witness)` has at least `VDL_DIFFICULTY_BITS` (v0 = 22) leading zero bits. Producing it costs the sender seconds of CPU (`vdl::solve`); any node verifies it with one hash (`vdl::verify`). This rate-limits how fast a single sender can inject opaque private frames into the mesh without requiring identity, accounts, or any trusted third party. **v0 is parallelizable proof-of-work, not a true sequential VDF** — it bounds spam per unit of compute, not per unit of wall-clock time; a sequential VDF can replace it behind the same interface later. Implemented in `mesh-core/src/vdl.rs`.
 * **Pairwise Key (Tier-3 pairing)**: The symmetric key two devices share for private messaging. Each device holds a long-term X25519 secret (32 OS-random bytes, never leaves the device); they exchange public keys out-of-band (paste/QR/paper) and both compute the same key via `crypto::pair_derive` = blake3-domain-separated X25519 Diffie-Hellman. There is no recipient address on the wire — receivers trial-decrypt against every stored pairwise key, and a successful ChaCha20-Poly1305 tag check both selects the conversation and authenticates the sender.
-* **Unsigned Hop-Mutable Region**: The final 12 bytes of the 194-byte frame (`reserved`), containing mutable metrics like TTL and hop count. Excluded from the Ed25519 signature so relays can decrement TTL without invalidating signatures.
+* **Unsigned Hop-Mutable Region**: The final 12 bytes of the 226-byte frame (`reserved`), containing mutable metrics like TTL and hop count. Excluded from the Ed25519 signature so relays can decrement TTL without invalidating signatures.
 
