@@ -30,6 +30,7 @@ import java.nio.CharBuffer
 import java.nio.charset.CodingErrorAction
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 // This is a helper for safely working with byte buffers returned from the Rust code.
 // A rust-owned buffer is represented by its capacity, its current length, and a
@@ -672,21 +673,87 @@ internal object IntegrityCheckingUniffiLib {
         uniffiCheckContractApiVersion(this)
         uniffiCheckApiChecksums(this)
     }
+    external fun uniffi_mesh_core_checksum_func_beacon_entropy(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_default_ttl_regional(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_frame_body_text(
+    ): Int
     external fun uniffi_mesh_core_checksum_func_frame_decodes(
     ): Int
     external fun uniffi_mesh_core_checksum_func_frame_epoch(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_frame_hash(
     ): Int
     external fun uniffi_mesh_core_checksum_func_frame_len(
     ): Int
     external fun uniffi_mesh_core_checksum_func_frame_mark(
     ): Int
+    external fun uniffi_mesh_core_checksum_func_frame_ttl(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_frame_verify_self(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_frame_witness_parts(
+    ): Int
     external fun uniffi_mesh_core_checksum_func_jaccard_sketch(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_make_message_frame(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_make_message_frame_ttl(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_make_message_frame_with_witness(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_make_private_frame(
     ): Int
     external fun uniffi_mesh_core_checksum_func_make_test_frame(
     ): Int
     external fun uniffi_mesh_core_checksum_func_observe_marks(
     ): Int
+    external fun uniffi_mesh_core_checksum_func_open_private_frame(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_pair_derive(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_pair_public(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_panic_wipe(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_pocp_sketch_to_div_sketch(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_pocp_verify_witness_local(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_pocp_witness(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_relay_frame(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_vdl_difficulty_bits(
+    ): Int
     external fun uniffi_mesh_core_checksum_func_verify_frame(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_was_panic_wiped(
+    ): Int
+    external fun uniffi_mesh_core_checksum_method_beaconffi_advance(
+    ): Int
+    external fun uniffi_mesh_core_checksum_method_beaconffi_advance_fallback(
+    ): Int
+    external fun uniffi_mesh_core_checksum_method_beaconffi_epoch(
+    ): Int
+    external fun uniffi_mesh_core_checksum_method_beaconffi_is_low_entropy(
+    ): Int
+    external fun uniffi_mesh_core_checksum_method_beaconffi_seed(
+    ): Int
+    external fun uniffi_mesh_core_checksum_method_ffidedup_check_and_insert(
+    ): Int
+    external fun uniffi_mesh_core_checksum_method_ffidedup_check_and_insert_epoch(
+    ): Int
+    external fun uniffi_mesh_core_checksum_method_ffitrust_distinct_count(
+    ): Int
+    external fun uniffi_mesh_core_checksum_method_ffitrust_record_verification(
+    ): Int
+    external fun uniffi_mesh_core_checksum_constructor_beaconffi_new(
+    ): Int
+    external fun uniffi_mesh_core_checksum_constructor_ffidedup_new(
+    ): Int
+    external fun uniffi_mesh_core_checksum_constructor_ffitrust_new(
     ): Int
     external fun ffi_mesh_core_uniffi_contract_version(
     ): Int
@@ -696,26 +763,109 @@ internal object IntegrityCheckingUniffiLib {
 
 internal object UniffiLib {
     
+    // The Cleaner for the whole library
+    internal val CLEANER: UniffiCleaner by lazy {
+        UniffiCleaner.create()
+    }
+    
 
     init {
         Native.register(UniffiLib::class.java, findLibraryName(componentName = "mesh_core"))
         
     }
+    external fun uniffi_mesh_core_fn_clone_beaconffi(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_mesh_core_fn_free_beaconffi(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_mesh_core_fn_constructor_beaconffi_new(`seed0`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_mesh_core_fn_method_beaconffi_advance(`ptr`: Long,`entropyBytes`: RustBuffer.ByValue,`nowMs`: Long,`floorMs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_mesh_core_fn_method_beaconffi_advance_fallback(`ptr`: Long,`nowMs`: Long,`floorMs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_mesh_core_fn_method_beaconffi_epoch(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun uniffi_mesh_core_fn_method_beaconffi_is_low_entropy(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_mesh_core_fn_method_beaconffi_seed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_clone_ffidedup(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_mesh_core_fn_free_ffidedup(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_mesh_core_fn_constructor_ffidedup_new(`cap`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_mesh_core_fn_method_ffidedup_check_and_insert(`ptr`: Long,`hash`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_mesh_core_fn_method_ffidedup_check_and_insert_epoch(`ptr`: Long,`hash`: RustBuffer.ByValue,`epoch`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_mesh_core_fn_clone_ffitrust(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_mesh_core_fn_free_ffitrust(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_mesh_core_fn_constructor_ffitrust_new(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_mesh_core_fn_method_ffitrust_distinct_count(`ptr`: Long,`frameHash`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun uniffi_mesh_core_fn_method_ffitrust_record_verification(`ptr`: Long,`frameHash`: RustBuffer.ByValue,`divSketch`: RustBuffer.ByValue,`tau`: Float,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun uniffi_mesh_core_fn_func_beacon_entropy(`marksFlat`: RustBuffer.ByValue,`minHearers`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_default_ttl_regional(uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun uniffi_mesh_core_fn_func_frame_body_text(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_frame_decodes(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     external fun uniffi_mesh_core_fn_func_frame_epoch(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_frame_hash(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_frame_len(uniffi_out_err: UniffiRustCallStatus, 
     ): Int
     external fun uniffi_mesh_core_fn_func_frame_mark(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_frame_ttl(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_frame_verify_self(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_mesh_core_fn_func_frame_witness_parts(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_jaccard_sketch(`a`: RustBuffer.ByValue,`b`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Float
-    external fun uniffi_mesh_core_fn_func_make_test_frame(`seed`: RustBuffer.ByValue,`epoch`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_mesh_core_fn_func_make_message_frame(`seed`: RustBuffer.ByValue,`epoch`: Int,`beaconSeed`: RustBuffer.ByValue,`localImmediate`: Byte,`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_make_message_frame_ttl(`seed`: RustBuffer.ByValue,`epoch`: Int,`beaconSeed`: RustBuffer.ByValue,`localImmediate`: Byte,`text`: RustBuffer.ByValue,`ttl`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_make_message_frame_with_witness(`seed`: RustBuffer.ByValue,`epoch`: Int,`beaconSeed`: RustBuffer.ByValue,`localImmediate`: Byte,`text`: RustBuffer.ByValue,`ttl`: Byte,`divSketch`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_make_private_frame(`seed`: RustBuffer.ByValue,`epoch`: Int,`beaconSeed`: RustBuffer.ByValue,`pairKey`: RustBuffer.ByValue,`text`: RustBuffer.ByValue,`counter`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_make_test_frame(`seed`: RustBuffer.ByValue,`epoch`: Int,`beaconSeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_observe_marks(`marksFlat`: RustBuffer.ByValue,`rssi`: RustBuffer.ByValue,`seed`: Int,`rssiFloorDbm`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_open_private_frame(`frame`: RustBuffer.ByValue,`pairKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_pair_derive(`ourSk`: RustBuffer.ByValue,`theirPk`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_pair_public(`sk`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_panic_wipe(uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_mesh_core_fn_func_pocp_sketch_to_div_sketch(`sketch`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_pocp_verify_witness_local(`localSketch`: RustBuffer.ByValue,`claimedDiv`: RustBuffer.ByValue,`seed`: Int,`framePrefix`: RustBuffer.ByValue,`wit`: RustBuffer.ByValue,`tau`: Float,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun uniffi_mesh_core_fn_func_pocp_witness(`divSketch`: RustBuffer.ByValue,`seed`: Int,`framePrefix`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_relay_frame(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_vdl_difficulty_bits(uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
     external fun uniffi_mesh_core_fn_func_verify_frame(`bytes`: RustBuffer.ByValue,`pubkey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_mesh_core_fn_func_was_panic_wiped(uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     external fun ffi_mesh_core_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -836,28 +986,127 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
+    if (lib.uniffi_mesh_core_checksum_func_beacon_entropy() != 30738) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_default_ttl_regional() != 53397) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_frame_body_text() != 60133) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_mesh_core_checksum_func_frame_decodes() != 29993) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_func_frame_epoch() != 10884) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_mesh_core_checksum_func_frame_len() != 8056) {
+    if (lib.uniffi_mesh_core_checksum_func_frame_hash() != 43643) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_frame_len() != 64073) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_func_frame_mark() != 24181) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_mesh_core_checksum_func_frame_ttl() != 13400) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_frame_verify_self() != 34868) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_frame_witness_parts() != 63049) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_mesh_core_checksum_func_jaccard_sketch() != 38029) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_mesh_core_checksum_func_make_test_frame() != 5506) {
+    if (lib.uniffi_mesh_core_checksum_func_make_message_frame() != 13506) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_make_message_frame_ttl() != 146) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_make_message_frame_with_witness() != 35626) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_make_private_frame() != 259) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_make_test_frame() != 30816) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_func_observe_marks() != 28327) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_mesh_core_checksum_func_open_private_frame() != 3238) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_pair_derive() != 6957) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_pair_public() != 45935) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_panic_wipe() != 21039) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_pocp_sketch_to_div_sketch() != 26269) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_pocp_verify_witness_local() != 24105) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_pocp_witness() != 53845) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_relay_frame() != 31977) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_vdl_difficulty_bits() != 32947) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_mesh_core_checksum_func_verify_frame() != 55488) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_was_panic_wiped() != 39404) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_method_beaconffi_advance() != 20728) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_method_beaconffi_advance_fallback() != 58749) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_method_beaconffi_epoch() != 45514) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_method_beaconffi_is_low_entropy() != 65019) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_method_beaconffi_seed() != 6804) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_method_ffidedup_check_and_insert() != 18470) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_method_ffidedup_check_and_insert_epoch() != 62913) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_method_ffitrust_distinct_count() != 24381) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_method_ffitrust_record_verification() != 30797) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_constructor_beaconffi_new() != 26819) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_constructor_ffidedup_new() != 41983) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_constructor_ffitrust_new() != 53559) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -952,6 +1201,97 @@ object UniffiWithHandle
  * @suppress
  * */
 object NoHandle
+/**
+ * The cleaner interface for Object finalization code to run.
+ * This is the entry point to any implementation that we're using.
+ *
+ * The cleaner registers objects and returns cleanables, so now we are
+ * defining a `UniffiCleaner` with a `UniffiClenaer.Cleanable` to abstract the
+ * different implmentations available at compile time.
+ *
+ * @suppress
+ */
+interface UniffiCleaner {
+    interface Cleanable {
+        fun clean()
+    }
+
+    fun register(value: Any, cleanUpTask: Runnable): UniffiCleaner.Cleanable
+
+    companion object
+}
+
+// The fallback Jna cleaner, which is available for both Android, and the JVM.
+private class UniffiJnaCleaner : UniffiCleaner {
+    private val cleaner = com.sun.jna.internal.Cleaner.getCleaner()
+
+    override fun register(value: Any, cleanUpTask: Runnable): UniffiCleaner.Cleanable =
+        UniffiJnaCleanable(cleaner.register(value, cleanUpTask))
+}
+
+private class UniffiJnaCleanable(
+    private val cleanable: com.sun.jna.internal.Cleaner.Cleanable,
+) : UniffiCleaner.Cleanable {
+    override fun clean() = cleanable.clean()
+}
+
+
+// We decide at uniffi binding generation time whether we were
+// using Android or not.
+// There are further runtime checks to chose the correct implementation
+// of the cleaner.
+private fun UniffiCleaner.Companion.create(): UniffiCleaner =
+    try {
+        // For safety's sake: if the library hasn't been run in android_cleaner = true
+        // mode, but is being run on Android, then we still need to think about
+        // Android API versions.
+        // So we check if java.lang.ref.Cleaner is there, and use that…
+        java.lang.Class.forName("java.lang.ref.Cleaner")
+        JavaLangRefCleaner()
+    } catch (e: ClassNotFoundException) {
+        // … otherwise, fallback to the JNA cleaner.
+        UniffiJnaCleaner()
+    }
+
+private class JavaLangRefCleaner : UniffiCleaner {
+    val cleaner = java.lang.ref.Cleaner.create()
+
+    override fun register(value: Any, cleanUpTask: Runnable): UniffiCleaner.Cleanable =
+        JavaLangRefCleanable(cleaner.register(value, cleanUpTask))
+}
+
+private class JavaLangRefCleanable(
+    val cleanable: java.lang.ref.Cleaner.Cleanable
+) : UniffiCleaner.Cleanable {
+    override fun clean() = cleanable.clean()
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterUByte: FfiConverter<UByte, Byte> {
+    override fun lift(value: Byte): UByte {
+        return value.toUByte()
+    }
+
+    fun lift(value: Int): UByte {
+        return value.toUByte()
+    }
+
+    override fun read(buf: ByteBuffer): UByte {
+        return lift(buf.get())
+    }
+
+    override fun lower(value: UByte): Byte {
+        return value.toByte()
+    }
+
+    override fun allocationSize(value: UByte) = 1UL
+
+    override fun write(value: UByte, buf: ByteBuffer) {
+        buf.put(value.toByte())
+    }
+}
 
 /**
  * @suppress
@@ -1145,6 +1485,1133 @@ public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
 }
 
 
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+/**
+ * A forward-secrecy beacon chain.
+ *
+ * Each epoch, LocalImmediate marks observed this epoch are hashed into an entropy block.
+ * The chain advances: `seed_N = BLAKE3(seed_{N-1} || entropy)`. The one-way hash chain
+ * ensures past seeds are unrecoverable from the current seed — providing forward secrecy
+ * for marks and ephemeral signing keys even if the device is later seized.
+ */
+public interface BeaconFfiInterface {
+    
+    /**
+     * Attempt to advance the beacon chain using entropy from LocalImmediate marks.
+     * `entropy_bytes` is 32 bytes from `beacon_entropy()`.
+     * Returns true if the chain advanced, false if within the acceleration floor.
+     */
+    fun `advance`(`entropyBytes`: kotlin.ByteArray, `nowMs`: kotlin.ULong, `floorMs`: kotlin.ULong): kotlin.Boolean
+    
+    /**
+     * Fallback advance: chain with zero external entropy.
+     * Returns true if the chain advanced, false if within the floor.
+     */
+    fun `advanceFallback`(`nowMs`: kotlin.ULong, `floorMs`: kotlin.ULong): kotlin.Boolean
+    
+    /**
+     * Current beacon epoch number. Not used for frame epoch (wall clock handles that).
+     */
+    fun `epoch`(): kotlin.UInt
+    
+    /**
+     * Whether the beacon is in low-entropy mode (no neighbors heard).
+     */
+    fun `isLowEntropy`(): kotlin.Boolean
+    
+    /**
+     * Current 32-byte beacon seed. Feed this into `make_message_frame` et al.
+     */
+    fun `seed`(): kotlin.ByteArray
+    
+    companion object
+}
+
+/**
+ * A forward-secrecy beacon chain.
+ *
+ * Each epoch, LocalImmediate marks observed this epoch are hashed into an entropy block.
+ * The chain advances: `seed_N = BLAKE3(seed_{N-1} || entropy)`. The one-way hash chain
+ * ensures past seeds are unrecoverable from the current seed — providing forward secrecy
+ * for marks and ephemeral signing keys even if the device is later seized.
+ */
+open class BeaconFfi: Disposable, AutoCloseable, BeaconFfiInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    /**
+     * Create a new beacon chain from OS-random bytes (seed0). Epoch 0.
+     *
+     * Any input length is accepted: the bytes are BLAKE3-hashed to the 32-byte seed,
+     * so a shim passing a wrong-length buffer degrades to a different chain instead of
+     * aborting the whole process across the FFI boundary (R6).
+     */
+    constructor(`seed0`: kotlin.ByteArray) :
+        this(UniffiWithHandle, 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_constructor_beaconffi_new(
+    
+        
+        FfiConverterByteArray.lower(`seed0`),_status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_mesh_core_fn_free_beaconffi(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_mesh_core_fn_clone_beaconffi(handle, status)
+        }
+    }
+
+    
+    /**
+     * Attempt to advance the beacon chain using entropy from LocalImmediate marks.
+     * `entropy_bytes` is 32 bytes from `beacon_entropy()`.
+     * Returns true if the chain advanced, false if within the acceleration floor.
+     */override fun `advance`(`entropyBytes`: kotlin.ByteArray, `nowMs`: kotlin.ULong, `floorMs`: kotlin.ULong): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_method_beaconffi_advance(
+        it,
+        
+        FfiConverterByteArray.lower(`entropyBytes`),
+        FfiConverterULong.lower(`nowMs`),
+        FfiConverterULong.lower(`floorMs`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Fallback advance: chain with zero external entropy.
+     * Returns true if the chain advanced, false if within the floor.
+     */override fun `advanceFallback`(`nowMs`: kotlin.ULong, `floorMs`: kotlin.ULong): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_method_beaconffi_advance_fallback(
+        it,
+        
+        FfiConverterULong.lower(`nowMs`),
+        FfiConverterULong.lower(`floorMs`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Current beacon epoch number. Not used for frame epoch (wall clock handles that).
+     */override fun `epoch`(): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_method_beaconffi_epoch(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Whether the beacon is in low-entropy mode (no neighbors heard).
+     */override fun `isLowEntropy`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_method_beaconffi_is_low_entropy(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Current 32-byte beacon seed. Feed this into `make_message_frame` et al.
+     */override fun `seed`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_method_beaconffi_seed(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBeaconFfi: FfiConverter<BeaconFfi, Long> {
+    override fun lower(value: BeaconFfi): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): BeaconFfi {
+        return BeaconFfi(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): BeaconFfi {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: BeaconFfi) = 8UL
+
+    override fun write(value: BeaconFfi, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+/**
+ * A bounded FIFO-evicting dedup set, exposed to the platform shims via UniFFI.
+ */
+public interface FfiDedupInterface {
+    
+    /**
+     * Returns `true` iff the hash is fresh (not previously seen). A hash of the wrong length
+     * returns `false` and inserts nothing.
+     */
+    fun `checkAndInsert`(`hash`: kotlin.ByteArray): kotlin.Boolean
+    
+    /**
+     * Like [`check_and_insert`] but also evicts entries whose epoch is more than 2 behind
+     * the given `epoch` (time-decaying window of ~3 epochs). Use this instead of
+     * [`check_and_insert`] when the caller has the frame's epoch.
+     */
+    fun `checkAndInsertEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt): kotlin.Boolean
+    
+    companion object
+}
+
+/**
+ * A bounded FIFO-evicting dedup set, exposed to the platform shims via UniFFI.
+ */
+open class FfiDedup: Disposable, AutoCloseable, FfiDedupInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    /**
+     * Create a new `FfiDedup` with the given capacity, clamped to 1..=2^20 so a
+     * shim bug cannot trigger a multi-GB allocation abort across the FFI boundary (R6).
+     */
+    constructor(`cap`: kotlin.UInt) :
+        this(UniffiWithHandle, 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_constructor_ffidedup_new(
+    
+        
+        FfiConverterUInt.lower(`cap`),_status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_mesh_core_fn_free_ffidedup(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_mesh_core_fn_clone_ffidedup(handle, status)
+        }
+    }
+
+    
+    /**
+     * Returns `true` iff the hash is fresh (not previously seen). A hash of the wrong length
+     * returns `false` and inserts nothing.
+     */override fun `checkAndInsert`(`hash`: kotlin.ByteArray): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_method_ffidedup_check_and_insert(
+        it,
+        
+        FfiConverterByteArray.lower(`hash`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Like [`check_and_insert`] but also evicts entries whose epoch is more than 2 behind
+     * the given `epoch` (time-decaying window of ~3 epochs). Use this instead of
+     * [`check_and_insert`] when the caller has the frame's epoch.
+     */override fun `checkAndInsertEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_method_ffidedup_check_and_insert_epoch(
+        it,
+        
+        FfiConverterByteArray.lower(`hash`),
+        FfiConverterUInt.lower(`epoch`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFfiDedup: FfiConverter<FfiDedup, Long> {
+    override fun lower(value: FfiDedup): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): FfiDedup {
+        return FfiDedup(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): FfiDedup {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: FfiDedup) = 8UL
+
+    override fun write(value: FfiDedup, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+/**
+ * A diversity-tracking trust accumulator.
+ * Counts how many distinct cell sketches have verified a given frame hash.
+ * Gates BroadcastCHAT display on ≥ k distinct verified cells.
+ */
+public interface FfiTrustInterface {
+    
+    /**
+     * Return the number of distinct cells that have verified `frame_hash`.
+     * 0 means the hash has never been verified (or inputs were wrong length).
+     */
+    fun `distinctCount`(`frameHash`: kotlin.ByteArray): kotlin.UInt
+    
+    /**
+     * Record that `frame_hash` was verified from the cell identified by `div_sketch`.
+     * Returns the new distinct-cell count for this frame hash.
+     *
+     * Anti-inflation (R2): claims that are fuzzy-equal (Jaccard ≥ `tau`) to an already
+     * recorded claim count as the SAME cell. Witness-less / empty claims never count.
+     */
+    fun `recordVerification`(`frameHash`: kotlin.ByteArray, `divSketch`: kotlin.ByteArray, `tau`: kotlin.Float): kotlin.UInt
+    
+    companion object
+}
+
+/**
+ * A diversity-tracking trust accumulator.
+ * Counts how many distinct cell sketches have verified a given frame hash.
+ * Gates BroadcastCHAT display on ≥ k distinct verified cells.
+ */
+open class FfiTrust: Disposable, AutoCloseable, FfiTrustInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    /**
+     * Create a new `FfiTrust` with empty verification state.
+     */
+    constructor() :
+        this(UniffiWithHandle, 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_constructor_ffitrust_new(
+    
+        _status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_mesh_core_fn_free_ffitrust(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_mesh_core_fn_clone_ffitrust(handle, status)
+        }
+    }
+
+    
+    /**
+     * Return the number of distinct cells that have verified `frame_hash`.
+     * 0 means the hash has never been verified (or inputs were wrong length).
+     */override fun `distinctCount`(`frameHash`: kotlin.ByteArray): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_method_ffitrust_distinct_count(
+        it,
+        
+        FfiConverterByteArray.lower(`frameHash`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Record that `frame_hash` was verified from the cell identified by `div_sketch`.
+     * Returns the new distinct-cell count for this frame hash.
+     *
+     * Anti-inflation (R2): claims that are fuzzy-equal (Jaccard ≥ `tau`) to an already
+     * recorded claim count as the SAME cell. Witness-less / empty claims never count.
+     */override fun `recordVerification`(`frameHash`: kotlin.ByteArray, `divSketch`: kotlin.ByteArray, `tau`: kotlin.Float): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_method_ffitrust_record_verification(
+        it,
+        
+        FfiConverterByteArray.lower(`frameHash`),
+        FfiConverterByteArray.lower(`divSketch`),
+        FfiConverterFloat.lower(`tau`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFfiTrust: FfiConverter<FfiTrust, Long> {
+    override fun lower(value: FfiTrust): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): FfiTrust {
+        return FfiTrust(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): FfiTrust {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: FfiTrust) = 8UL
+
+    override fun write(value: FfiTrust, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+
+/**
+ * Witness parts extracted from a received frame for PoCP/VDL verification.
+ */
+data class WitnessParts (
+    /**
+     * 16-byte div_sketch from the frame (claimed cell digest or counter).
+     */
+    var `divSketch`: kotlin.ByteArray
+    , 
+    /**
+     * 16-byte PoCP witness MAC / VDL witness from the frame.
+     */
+    var `pocpWit`: kotlin.ByteArray
+    , 
+    /**
+     * First 102 bytes of the frame (everything before the witness field).
+     */
+    var `framePrefix`: kotlin.ByteArray
+    , 
+    /**
+     * Epoch field from the frame.
+     */
+    var `epoch`: kotlin.UInt
+    , 
+    /**
+     * Message type byte (1=LocalImmediate, 2=RegionalPropagated, 3=Private).
+     */
+    var `msgType`: kotlin.UByte
+    , 
+    /**
+     * 16-byte blake3 hash of the frame body (bytes 38..102).
+     * Used as the trust diversity key — same alert text → same body_hash.
+     */
+    var `bodyHash`: kotlin.ByteArray
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWitnessParts: FfiConverterRustBuffer<WitnessParts> {
+    override fun read(buf: ByteBuffer): WitnessParts {
+        return WitnessParts(
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: WitnessParts) = (
+            FfiConverterByteArray.allocationSize(value.`divSketch`) +
+            FfiConverterByteArray.allocationSize(value.`pocpWit`) +
+            FfiConverterByteArray.allocationSize(value.`framePrefix`) +
+            FfiConverterUInt.allocationSize(value.`epoch`) +
+            FfiConverterUByte.allocationSize(value.`msgType`) +
+            FfiConverterByteArray.allocationSize(value.`bodyHash`)
+    )
+
+    override fun write(value: WitnessParts, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`divSketch`, buf)
+            FfiConverterByteArray.write(value.`pocpWit`, buf)
+            FfiConverterByteArray.write(value.`framePrefix`, buf)
+            FfiConverterUInt.write(value.`epoch`, buf)
+            FfiConverterUByte.write(value.`msgType`, buf)
+            FfiConverterByteArray.write(value.`bodyHash`, buf)
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalUByte: FfiConverterRustBuffer<kotlin.UByte?> {
+    override fun read(buf: ByteBuffer): kotlin.UByte? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterUByte.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.UByte?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterUByte.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.UByte?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterUByte.write(value, buf)
+        }
+    }
+}
+
+
 
 
 /**
@@ -1182,6 +2649,38 @@ public object FfiConverterOptionalUInt: FfiConverterRustBuffer<kotlin.UInt?> {
 /**
  * @suppress
  */
+public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?> {
+    override fun read(buf: ByteBuffer): kotlin.String? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterString.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.String?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterString.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.String?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterString.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteArray?> {
     override fun read(buf: ByteBuffer): kotlin.ByteArray? {
         if (buf.get().toInt() == 0) {
@@ -1204,6 +2703,38 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
         } else {
             buf.put(1)
             FfiConverterByteArray.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeWitnessParts: FfiConverterRustBuffer<WitnessParts?> {
+    override fun read(buf: ByteBuffer): WitnessParts? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeWitnessParts.read(buf)
+    }
+
+    override fun allocationSize(value: WitnessParts?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeWitnessParts.allocationSize(value)
+        }
+    }
+
+    override fun write(value: WitnessParts?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeWitnessParts.write(value, buf)
         }
     }
 }
@@ -1264,6 +2795,56 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
     }
 }
         /**
+         * Compute beacon entropy from a list of 16-byte LocalImmediate marks.
+         * `marks_flat` is the concatenation of 16-byte mark bytes.
+         * Returns 32-byte entropy block, or `None` if fewer than `min_hearers` unique marks.
+         */ fun `beaconEntropy`(`marksFlat`: kotlin.ByteArray, `minHearers`: kotlin.UInt): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_beacon_entropy(
+    
+        
+        FfiConverterByteArray.lower(`marksFlat`),
+        FfiConverterUInt.lower(`minHearers`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The TTL a RegionalPropagated or Private frame carries AT ORIGINATION.
+         *
+         * Presence / direct-RF detection: relays always decrement, so a received frame of
+         * msg_type 2 or 3 whose TTL still equals this value came straight from the originator
+         * (direct RF), while any lower TTL arrived via the relay path. LocalImmediate frames
+         * (TTL 0) are never relayed and are always direct. Kept in Rust so the shim never
+         * hardcodes protocol constants (invariant #1).
+         */ fun `defaultTtlRegional`(): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_default_ttl_regional(
+    
+        _status)
+}
+    )
+    }
+    
+
+        /**
+         * Decode `bytes` then extract the body text. Returns `None` on any failure.
+         */ fun `frameBodyText`(`bytes`: kotlin.ByteArray): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_frame_body_text(
+    
+        
+        FfiConverterByteArray.lower(`bytes`),_status)
+}
+    )
+    }
+    
+
+        /**
          * True iff `bytes` is a structurally-valid frame (len + version + type). Parse-before-forward:
          * a shim can cheaply reject junk before touching the state machine.
          */ fun `frameDecodes`(`bytes`: kotlin.ByteArray): kotlin.Boolean {
@@ -1293,7 +2874,22 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
     
 
         /**
-         * Fixed wire frame size in bytes (194). Lets a shim size its radio buffers correctly.
+         * Compute the 16-byte dedup hash of a frame buffer. Returns `None` unless `bytes` is exactly
+         * 226 bytes long.
+         */ fun `frameHash`(`bytes`: kotlin.ByteArray): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_frame_hash(
+    
+        
+        FfiConverterByteArray.lower(`bytes`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Fixed wire frame size in bytes (226). Lets a shim size its radio buffers correctly.
          */ fun `frameLen`(): kotlin.UInt {
             return FfiConverterUInt.lift(
     uniffiRustCall() { _status ->
@@ -1320,6 +2916,52 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
     
 
         /**
+         * Extract the TTL from wire byte 214 of a frame. Returns `None` unless the frame decodes
+         * successfully (correct length, version, and message type).
+         */ fun `frameTtl`(`bytes`: kotlin.ByteArray): kotlin.UByte? {
+            return FfiConverterOptionalUByte.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_frame_ttl(
+    
+        
+        FfiConverterByteArray.lower(`bytes`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Verify a frame's signature using its own embedded ephemeral pubkey.
+         * True iff the frame decodes AND the embedded pubkey verifies the signature.
+         * No separate pubkey needed — the pubkey is extracted from the frame itself.
+         */ fun `frameVerifySelf`(`bytes`: kotlin.ByteArray): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_frame_verify_self(
+    
+        
+        FfiConverterByteArray.lower(`bytes`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Extract witness-related fields from a frame for PoCP/VDL verification.
+         * Returns `None` if the frame does not decode.
+         */ fun `frameWitnessParts`(`bytes`: kotlin.ByteArray): WitnessParts? {
+            return FfiConverterOptionalTypeWitnessParts.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_frame_witness_parts(
+    
+        
+        FfiConverterByteArray.lower(`bytes`),_status)
+}
+    )
+    }
+    
+
+        /**
          * Jaccard similarity in [0,1] of two sketches (each a 16-slot `u64` list from `observe_marks`).
          * Two co-located devices score high; a remote van scores low. Lengths != 16 return 0.0.
          */ fun `jaccardSketch`(`a`: List<kotlin.ULong>, `b`: List<kotlin.ULong>): kotlin.Float {
@@ -1336,17 +2978,125 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
     
 
         /**
+         * Build a signed message frame. `local_immediate` selects LocalImmediate; otherwise
+         * RegionalPropagated. Returns `None` if `seed` or `beacon_seed` is not 32 bytes or
+         * `text` is longer than 63 bytes.
+         */ fun `makeMessageFrame`(`seed`: kotlin.ByteArray, `epoch`: kotlin.UInt, `beaconSeed`: kotlin.ByteArray, `localImmediate`: kotlin.Boolean, `text`: kotlin.String): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_make_message_frame(
+    
+        
+        FfiConverterByteArray.lower(`seed`),
+        FfiConverterUInt.lower(`epoch`),
+        FfiConverterByteArray.lower(`beaconSeed`),
+        FfiConverterBoolean.lower(`localImmediate`),
+        FfiConverterString.lower(`text`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Build a signed message frame with an explicit TTL. `local_immediate` selects LocalImmediate;
+         * otherwise RegionalPropagated. Returns `None` if `seed` is not 32 bytes or `text` is longer
+         * than 63 bytes.
+         *
+         * Wire byte 214 (`reserved[0]`) is set to `ttl`; the signature is unaffected because the
+         * reserved region is outside `SIG_REGION` (`0..150`).
+         */ fun `makeMessageFrameTtl`(`seed`: kotlin.ByteArray, `epoch`: kotlin.UInt, `beaconSeed`: kotlin.ByteArray, `localImmediate`: kotlin.Boolean, `text`: kotlin.String, `ttl`: kotlin.UByte): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_make_message_frame_ttl(
+    
+        
+        FfiConverterByteArray.lower(`seed`),
+        FfiConverterUInt.lower(`epoch`),
+        FfiConverterByteArray.lower(`beaconSeed`),
+        FfiConverterBoolean.lower(`localImmediate`),
+        FfiConverterString.lower(`text`),
+        FfiConverterUByte.lower(`ttl`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Build a signed public message frame WITH a PoCP spacetime witness.
+         *
+         * Same as `make_message_frame_ttl` but embeds a `div_sketch` (16 bytes from
+         * `pocp_sketch_to_div_sketch`) and computes a PoCP witness so the frame proves the
+         * sender was physically present in the cell.
+         *
+         * Returns `None` if `seed` is not 32 bytes, `div_sketch` is not 16 bytes, or `text`
+         * exceeds 63 UTF-8 bytes. Private frames must use `make_private_frame` instead.
+         */ fun `makeMessageFrameWithWitness`(`seed`: kotlin.ByteArray, `epoch`: kotlin.UInt, `beaconSeed`: kotlin.ByteArray, `localImmediate`: kotlin.Boolean, `text`: kotlin.String, `ttl`: kotlin.UByte, `divSketch`: kotlin.ByteArray): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_make_message_frame_with_witness(
+    
+        
+        FfiConverterByteArray.lower(`seed`),
+        FfiConverterUInt.lower(`epoch`),
+        FfiConverterByteArray.lower(`beaconSeed`),
+        FfiConverterBoolean.lower(`localImmediate`),
+        FfiConverterString.lower(`text`),
+        FfiConverterUByte.lower(`ttl`),
+        FfiConverterByteArray.lower(`divSketch`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Build an encrypted private frame. `seed` is 32 bytes; `pair_key` is the 32-byte pairwise key
+         * from `pair_derive`. Returns the 226-byte wire frame, or `None` if `seed` or `pair_key` are not
+         * 32 bytes, or `text` exceeds 47 UTF-8 bytes.
+         *
+         * `counter` is a monotonic per-device u64 that prevents AEAD nonce reuse under the same
+         * (seed, epoch) tuple. The shim MUST persist and increment this value across private sends
+         * and service restarts.
+         *
+         * WARNING: this call performs a blocking VDL proof-of-work solve that may take several seconds of
+         * CPU time. Always call off the UI thread.
+         * Build an encrypted private frame. `seed` is 32 bytes; `beacon_seed` is 32 bytes from the
+         * beacon chain; `pair_key` is the 32-byte pairwise key from `pair_derive`. Returns the 226-byte
+         * wire frame, or `None` if inputs are wrong length or `text` exceeds 47 UTF-8 bytes.
+         *
+         * WARNING: this call performs a blocking VDL proof-of-work solve that may take several seconds of
+         * CPU time. Always call off the UI thread.
+         */ fun `makePrivateFrame`(`seed`: kotlin.ByteArray, `epoch`: kotlin.UInt, `beaconSeed`: kotlin.ByteArray, `pairKey`: kotlin.ByteArray, `text`: kotlin.String, `counter`: kotlin.ULong): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_make_private_frame(
+    
+        
+        FfiConverterByteArray.lower(`seed`),
+        FfiConverterUInt.lower(`epoch`),
+        FfiConverterByteArray.lower(`beaconSeed`),
+        FfiConverterByteArray.lower(`pairKey`),
+        FfiConverterString.lower(`text`),
+        FfiConverterULong.lower(`counter`),_status)
+}
+    )
+    }
+    
+
+        /**
          * Build a signed test frame from a 32-byte `seed`. Proves encode + crypto across the FFI
-         * boundary from Kotlin/Swift. Returns the 194 B wire frame, or `None` if `seed` is not 32 B.
+         * boundary from Kotlin/Swift. Returns the 226 B wire frame, or `None` if `seed` is not 32 B.
          * Smoke-test helper only — real origination goes through the state machine.
-         */ fun `makeTestFrame`(`seed`: kotlin.ByteArray, `epoch`: kotlin.UInt): kotlin.ByteArray? {
+         *
+         * Delegates to `message::make_message_frame` so there is exactly one origination path.
+         */ fun `makeTestFrame`(`seed`: kotlin.ByteArray, `epoch`: kotlin.UInt, `beaconSeed`: kotlin.ByteArray): kotlin.ByteArray? {
             return FfiConverterOptionalByteArray.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_mesh_core_fn_func_make_test_frame(
     
         
         FfiConverterByteArray.lower(`seed`),
-        FfiConverterUInt.lower(`epoch`),_status)
+        FfiConverterUInt.lower(`epoch`),
+        FfiConverterByteArray.lower(`beaconSeed`),_status)
 }
     )
     }
@@ -1372,6 +3122,168 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
     
 
         /**
+         * Decrypt and verify a private frame using the 32-byte pairwise key. Returns the plaintext, or
+         * `None` if `frame` is not 226 bytes, `pair_key` is not 32 bytes, the frame is not a private
+         * message type, the VDL witness fails, or the key is wrong.
+         */ fun `openPrivateFrame`(`frame`: kotlin.ByteArray, `pairKey`: kotlin.ByteArray): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_open_private_frame(
+    
+        
+        FfiConverterByteArray.lower(`frame`),
+        FfiConverterByteArray.lower(`pairKey`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Derive the 32-byte pairwise message key from our secret key and their public key. Returns
+         * `None` if either input is not exactly 32 bytes or if the contributory check fails (all-zero
+         * output, i.e. the peer supplied a low-order point).
+         */ fun `pairDerive`(`ourSk`: kotlin.ByteArray, `theirPk`: kotlin.ByteArray): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_pair_derive(
+    
+        
+        FfiConverterByteArray.lower(`ourSk`),
+        FfiConverterByteArray.lower(`theirPk`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * X25519 public key for the device's long-term pairing secret (32 OS-random bytes generated by
+         * the app). Returns the 32-byte public key, or `None` if `sk` is not exactly 32 bytes.
+         */ fun `pairPublic`(`sk`: kotlin.ByteArray): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_pair_public(
+    
+        
+        FfiConverterByteArray.lower(`sk`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Immediately flag a panic-wipe. The platform shim MUST, after calling this:
+         * 1. Clear all persisted key material (PairStore.wipe)
+         * 2. Clear configuration (ConfigStore)
+         * 3. Stop the BLE service (MeshService.stopForeground + stopSelf)
+         * 4. Optionally terminate the process
+         *
+         * This sets an internal flag that `was_panic_wiped()` returns once.
+         */ fun `panicWipe`()
+        = 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_panic_wipe(
+    
+        _status)
+}
+    
+    
+
+        /**
+         * Truncate a 16-slot u64 cell sketch to a 16-byte `div_sketch` for the wire.
+         * Takes the low byte of each u64 slot. Returns `None` if `sketch` is not 16 u64 values.
+         */ fun `pocpSketchToDivSketch`(`sketch`: List<kotlin.ULong>): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_pocp_sketch_to_div_sketch(
+    
+        
+        FfiConverterSequenceULong.lower(`sketch`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Verify a PoCP witness AND check co-presence against the local cell sketch.
+         *
+         * Returns a verdict code:
+         * - 0: Valid — MAC valid + sketches overlap (Jaccard ≥ tau)
+         * - 1: CellMismatch — MAC valid but sketches don't overlap
+         * - 2: Stale — MAC invalid (bad witness or wrong sketch/seed)
+         * - 255: Error — wrong input lengths
+         *
+         * `local_sketch` is 16 u64 values from `observe_marks`. `claimed_div` is 16 bytes
+         * from the frame's `div_sketch` field. `frame_prefix` is the first 102 bytes of the
+         * frame. `wit` is 16 bytes from the frame's `pocp_wit` field.
+         */ fun `pocpVerifyWitnessLocal`(`localSketch`: List<kotlin.ULong>, `claimedDiv`: kotlin.ByteArray, `seed`: kotlin.UInt, `framePrefix`: kotlin.ByteArray, `wit`: kotlin.ByteArray, `tau`: kotlin.Float): kotlin.UByte {
+            return FfiConverterUByte.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_pocp_verify_witness_local(
+    
+        
+        FfiConverterSequenceULong.lower(`localSketch`),
+        FfiConverterByteArray.lower(`claimedDiv`),
+        FfiConverterUInt.lower(`seed`),
+        FfiConverterByteArray.lower(`framePrefix`),
+        FfiConverterByteArray.lower(`wit`),
+        FfiConverterFloat.lower(`tau`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Compute a PoCP witness MAC for a frame.
+         *
+         * `div_sketch` is 16 bytes (from `pocp_sketch_to_div_sketch`). `seed` is the epoch index
+         * (must match the frame's epoch field). `frame_prefix` is the first 102 bytes of the
+         * unsigned frame (everything before the `pocp_wit` field).
+         *
+         * Returns the 16-byte witness, or `None` if inputs are wrong length.
+         */ fun `pocpWitness`(`divSketch`: kotlin.ByteArray, `seed`: kotlin.UInt, `framePrefix`: kotlin.ByteArray): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_pocp_witness(
+    
+        
+        FfiConverterByteArray.lower(`divSketch`),
+        FfiConverterUInt.lower(`seed`),
+        FfiConverterByteArray.lower(`framePrefix`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Relay a received frame: decrement the TTL at byte 214 and return the modified buffer, or
+         * `None` if the frame should be dropped (bad length, decode error, LocalImmediate type, or
+         * TTL already 0). The returned buffer is safe to rebroadcast verbatim; the signature is intact.
+         */ fun `relayFrame`(`bytes`: kotlin.ByteArray): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_relay_frame(
+    
+        
+        FfiConverterByteArray.lower(`bytes`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The VDL difficulty in bits used for private frames. Exposed for display in the debug UI.
+         */ fun `vdlDifficultyBits`(): kotlin.UByte {
+            return FfiConverterUByte.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_vdl_difficulty_bits(
+    
+        _status)
+}
+    )
+    }
+    
+
+        /**
          * The parse -> verify path a shim runs for every scanned frame: decode `bytes`, then verify its
          * signature against `pubkey` (32 B) over the canonical region. True iff structurally valid AND
          * the signature checks out. Never asserts anything about the sender beyond this one message.
@@ -1383,6 +3295,20 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
         
         FfiConverterByteArray.lower(`bytes`),
         FfiConverterByteArray.lower(`pubkey`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Returns `true` once after a `panic_wipe()` call, then resets to `false`.
+         * The platform shim calls this from the service loop to detect a wipe request.
+         */ fun `wasPanicWiped`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_was_panic_wiped(
+    
+        _status)
 }
     )
     }

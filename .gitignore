@@ -1,6 +1,16 @@
 # Rust build artifacts
 /mesh-core/target
 /mesh-core/fuzz/target
+/laptop/target
+target/
+
+# Android build artifacts
+/android/app/build/
+/android/.gradle/
+/android/.kotlin/
+.kotlin/
+*.apk
+api.qrserver.png
 
 # Fuzzing corpus + crash artifacts (regenerated; keep only curated seeds if ever added)
 /mesh-core/fuzz/corpus
@@ -12,3 +22,4 @@
 # Editor / OS cruft
 **/*.rs.bk
 .DS_Store
+

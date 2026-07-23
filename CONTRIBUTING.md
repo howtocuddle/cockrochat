@@ -17,7 +17,7 @@ Bridgefy" papers). Violating one is a security bug, not a nit. A reviewer WILL b
    panic-free on every input — it is the anti-zip-bomb boundary. This is fuzzed in CI.
 4. **Danger-only on the wire. Never assert "safe."** Silence ≠ safe. The confidence wall shows
    corroboration/dispute counts, never a boolean, and only for danger.
-5. **Ephemeral keys, minimal persisted state, panic-wipe.** Keys rotate hourly and live only in the
+5. **Ephemeral keys, minimal persisted state, panic-wipe.** Keys rotate with the beacon chain and live only in the
    platform secure store via the `KeyStore` trait. The `store` module is size-capped and
    auto-decaying. `panic_wipe` must actually erase.
 6. **The public plane is openly unencrypted — never label it E2E.** Only the deferred Tier-3

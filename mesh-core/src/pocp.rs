@@ -68,18 +68,367 @@ pub fn matches(a: &CellSketch, b: &CellSketch, tau: f32) -> bool {
     jaccard(a, b) >= tau
 }
 
-/// Spacetime witness: MAC_{KDF(cell || seed)} over the canonical message.
-pub fn witness(_cell: &CellSketch, _seed: u32, _msg_canonical: &[u8]) -> [u8; 16] {
-    todo!("M5")
+// ---- div_sketch helpers ----
+
+/// Truncate a `CellSketch` to 16 bytes for the wire `div_sketch` field.
+/// Takes the low byte of each u64 slot. High bytes are discarded.
+pub fn sketch_to_div_sketch(sketch: &CellSketch) -> [u8; 16] {
+    let mut out = [0u8; 16];
+    for (i, slot) in sketch.0.iter().enumerate() {
+        out[i] = *slot as u8;
+    }
+    out
 }
 
-/// Verify a received witness against the local cell at threshold `tau`.
+/// Convert a wire `div_sketch` (16 u8 low-byte values) back to a `CellSketch`.
+///
+/// 0xFF bytes are treated as KMV-padding empty slots and mapped to `u64::MAX`
+/// so the existing `jaccard` filter (`v != u64::MAX`) correctly discards them.
+/// Without this, a remote van's all-0xFF empty sketch would match any empty local
+/// sketch at Jaccard 1.0 — the exact bypass PoCP was built to prevent.
+pub fn div_sketch_to_cell(div: &[u8; 16]) -> CellSketch {
+    let mut arr = [0u64; 16];
+    for (i, &b) in div.iter().enumerate() {
+        arr[i] = if b == 0xFF { u64::MAX } else { b as u64 };
+    }
+    CellSketch(arr)
+}
+
+// ---- witness MAC ----
+
+/// Domain-separated key derivation for the PoCP witness MAC.
+/// key = blake3::derive_key("mesh-core:v1:pocp-wit", div_sketch || seed_le)
+fn witness_key(div_sketch: &[u8; 16], seed: u32) -> [u8; 32] {
+    let mut material = [0u8; 20];
+    material[..16].copy_from_slice(div_sketch);
+    material[16..].copy_from_slice(&seed.to_le_bytes());
+    blake3::derive_key("mesh-core:v1:pocp-wit", &material)
+}
+
+/// Spacetime witness: `MAC_{KDF(div_sketch || epoch)}(frame_prefix)`.
+///
+/// `frame_prefix` is the first 102 bytes of the unsigned frame (everything before
+/// the `pocp_wit` field at bytes 102..118). Returns the 16-byte witness to place
+/// at `pocp_wit` before signing.
+///
+/// SECURITY PROPERTIES — read carefully (R1):
+///   * The MAC key is derived from PUBLIC values (the claimed `div_sketch` and the
+///     epoch index). Anyone can recompute it. The MAC therefore provides
+///     ANTI-MALLEABILITY ONLY: it binds the div_sketch to this exact frame prefix,
+///     so a relay cannot swap or perturb the sketch on an existing frame without
+///     invalidating the witness.
+///   * Co-presence evidence comes from the Jaccard gate in `verify_witness_local`:
+///     the claimed sketch must overlap the verifier's own KMV sketch of marks it
+///     actually heard over the air. A remote party that never observed the cell's
+///     current marks cannot fabricate an overlapping sketch.
+///   * RESIDUAL GAP: within one epoch, an attacker can copy the div_sketch truncation
+///     broadcast by another frame from the same cell and claim it as its own (the
+///     truncation is public by design). Mitigations live outside this function:
+///     shim-side same-epoch sketch-reuse detection across distinct sender marks, and
+///     `trust` pairwise-dissimilarity counting. Fully unforgeable co-presence would
+///     require fuzzy-extractor / secure-sketch keying of the MAC (deferred, M6+).
+pub fn witness(div_sketch: &[u8; 16], seed: u32, frame_prefix: &[u8]) -> [u8; 16] {
+    let key = witness_key(div_sketch, seed);
+    let mac = blake3::keyed_hash(&key, frame_prefix);
+    let mut out = [0u8; 16];
+    out.copy_from_slice(&mac.as_bytes()[..16]);
+    out
+}
+
+/// Verify a received witness against a claimed `div_sketch`.
+/// Returns `true` if the MAC is valid (sender knew this sketch at this epoch),
+/// `false` otherwise.
+pub fn verify_witness(
+    div_sketch: &[u8; 16],
+    seed: u32,
+    frame_prefix: &[u8],
+    wit: &[u8; 16],
+) -> bool {
+    let expected = witness(div_sketch, seed, frame_prefix);
+    // constant-time comparison to avoid timing side-channels
+    let mut acc = 0u8;
+    for (a, b) in expected.iter().zip(wit.iter()) {
+        acc |= a ^ b;
+    }
+    acc == 0
+}
+
+/// Verify a received witness AND check co-presence against the local cell sketch.
+///
+/// Processing order:
+///   1. Verify the witness MAC — did the sender know this `claimed_div` sketch?
+///   2. Truncate the local sketch to u8, convert both to `CellSketch`.
+///   3. Compute Jaccard between the two u8-truncated sketches.
+///   4. If Jaccard ≥ `tau` → `Valid`, else → `CellMismatch`.
+///
+/// `claimed_div` comes from the frame's `div_sketch` field (bytes 18..34).
+/// `frame_prefix` is the first 102 bytes of the frame (bytes 0..102).
 pub fn verify_witness_local(
-    _local: &CellSketch,
-    _seed: u32,
-    _msg: &[u8],
-    _wit: &[u8; 16],
-    _tau: f32,
+    local: &CellSketch,
+    claimed_div: &[u8; 16],
+    seed: u32,
+    frame_prefix: &[u8],
+    wit: &[u8; 16],
+    tau: f32,
 ) -> WitVerdict {
-    todo!("M5")
+    if !verify_witness(claimed_div, seed, frame_prefix, wit) {
+        return WitVerdict::Stale;
+    }
+    // Jaccard on u8-truncated sketches: both sides truncated before comparison.
+    let local_div = sketch_to_div_sketch(local);
+    let local_cell = div_sketch_to_cell(&local_div);
+    let sender_cell = div_sketch_to_cell(claimed_div);
+    if matches(&local_cell, &sender_cell, tau) {
+        WitVerdict::Valid
+    } else {
+        WitVerdict::CellMismatch
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a cell sketch with deterministic u64 values for testing.
+    fn test_sketch(values: &[u64]) -> CellSketch {
+        let mut arr = [u64::MAX; 16];
+        for (i, &v) in values.iter().enumerate() {
+            if i < 16 {
+                arr[i] = v;
+            }
+        }
+        CellSketch(arr)
+    }
+
+    // ---- div_sketch round-trip ----
+
+    #[test]
+    fn sketch_to_div_sketch_preserves_low_byte() {
+        let sketch = test_sketch(&[0xDEADBEEF00000042, 0xCAFE0000000000FF]);
+        let div = sketch_to_div_sketch(&sketch);
+        assert_eq!(div[0], 0x42);
+        assert_eq!(div[1], 0xFF);
+        // remaining slots must be 0xFF (u64::MAX low byte)
+        for (slot, val) in div.iter().enumerate().skip(2) {
+            assert_eq!(*val, 0xFF, "slot {slot}: u64::MAX low byte is 0xFF");
+        }
+    }
+
+    #[test]
+    fn div_sketch_to_cell_zero_extends() {
+        let div: [u8; 16] = [
+            0x42, 0xFF, 0x00, 0x7F, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        let cell = div_sketch_to_cell(&div);
+        assert_eq!(cell.0[0], 0x42u64);
+        assert_eq!(cell.0[1], u64::MAX, "0xFF → u64::MAX (padding sentinel)");
+        assert_eq!(cell.0[2], 0x00u64);
+        assert_eq!(cell.0[3], 0x7Fu64);
+        for i in 4..16 {
+            assert_eq!(cell.0[i], 0u64, "slot {i} must be zero");
+        }
+    }
+
+    #[test]
+    fn empty_div_sketch_does_not_match_another_empty() {
+        // The remote-van bypass: an all-0xFF div_sketch (empty cell) must NOT
+        // produce Jaccard 1.0 against any other sketch — empty + empty ≠ match.
+        let empty_div = [0xFFu8; 16];
+        let empty_cell = div_sketch_to_cell(&empty_div);
+        // All slots → u64::MAX, which jaccard filters → empty set → Jaccard 0.
+        let one_mark = test_sketch(&[0x0000000000000042]);
+        let div_one = sketch_to_div_sketch(&one_mark);
+        let cell_one = div_sketch_to_cell(&div_one);
+        assert_eq!(jaccard(&empty_cell, &cell_one), 0.0,
+            "empty div_sketch must not match a single-mark cell");
+        assert_eq!(jaccard(&empty_cell, &empty_cell), 0.0,
+            "two empty div_sketches must not match each other");
+    }
+
+    #[test]
+    fn div_sketch_roundtrip_via_cell_truncation() {
+        // Two sketches with known overlap on low bytes
+        let a = test_sketch(&[0x0100, 0x0200, 0x0300, 0x0400, 0x0500, 0x0600, 0x0700, 0x0800]);
+        let b = test_sketch(&[0x0101, 0x0201, 0x0301, 0x0401, 0x0501, 0x0601, 0x0701, 0x0801]);
+        // Different high bytes, same low bytes → truncated sketches identical → Jaccard = 1.0
+        let _div_a = sketch_to_div_sketch(&a);
+        let _div_b = sketch_to_div_sketch(&b);
+        // a and b have different low bytes (0x00 vs 0x01) → different truncated sketches.
+        // Use values with same low byte below for the real roundtrip test.
+        let c = test_sketch(&[0x0000000000000042, 0x00000000000000FF]);
+        let d = test_sketch(&[0xDEADBEEF00000042, 0xCAFEBABE000000FF]);
+        let div_c = sketch_to_div_sketch(&c);
+        let div_d = sketch_to_div_sketch(&d);
+        assert_eq!(div_c[0], 0x42);
+        assert_eq!(div_d[0], 0x42);
+        assert_eq!(div_c[1], 0xFF);
+        assert_eq!(div_d[1], 0xFF);
+    }
+
+    // ---- witness MAC ----
+
+    #[test]
+    fn witness_deterministic() {
+        let div: [u8; 16] = [0xAA; 16];
+        let seed = 42u32;
+        let prefix = b"hello world test prefix data";
+        let w1 = witness(&div, seed, prefix);
+        let w2 = witness(&div, seed, prefix);
+        assert_eq!(w1, w2, "witness must be deterministic");
+    }
+
+    #[test]
+    fn witness_changes_with_div_sketch() {
+        let div_a = [0xAA; 16];
+        let div_b = [0xBB; 16];
+        let seed = 1u32;
+        let prefix = b"test";
+        let wa = witness(&div_a, seed, prefix);
+        let wb = witness(&div_b, seed, prefix);
+        assert_ne!(wa, wb, "different div_sketch → different witness");
+    }
+
+    #[test]
+    fn witness_changes_with_seed() {
+        let div = [0x42; 16];
+        let prefix = b"test";
+        let w1 = witness(&div, 1, prefix);
+        let w2 = witness(&div, 2, prefix);
+        assert_ne!(w1, w2, "different seed → different witness");
+    }
+
+    #[test]
+    fn witness_changes_with_prefix() {
+        let div = [0x77; 16];
+        let seed = 5u32;
+        let w1 = witness(&div, seed, b"prefix A");
+        let w2 = witness(&div, seed, b"prefix B");
+        assert_ne!(w1, w2, "different prefix → different witness");
+    }
+
+    #[test]
+    fn verify_witness_accepts_valid() {
+        let div = [0x11; 16];
+        let seed = 100u32;
+        let prefix = b"valid test prefix";
+        let wit = witness(&div, seed, prefix);
+        assert!(verify_witness(&div, seed, prefix, &wit));
+    }
+
+    #[test]
+    fn verify_witness_rejects_wrong_div() {
+        let div = [0x11; 16];
+        let wrong_div = [0x22; 16];
+        let seed = 100u32;
+        let prefix = b"test";
+        let wit = witness(&div, seed, prefix);
+        assert!(!verify_witness(&wrong_div, seed, prefix, &wit));
+    }
+
+    #[test]
+    fn verify_witness_rejects_wrong_seed() {
+        let div = [0x33; 16];
+        let prefix = b"test";
+        let wit = witness(&div, 10, prefix);
+        assert!(!verify_witness(&div, 20, prefix, &wit));
+    }
+
+    #[test]
+    fn verify_witness_rejects_tampered_prefix() {
+        let div = [0x44; 16];
+        let seed = 7u32;
+        let prefix = b"original";
+        let wit = witness(&div, seed, prefix);
+        assert!(!verify_witness(&div, seed, b"tampered", &wit));
+    }
+
+    #[test]
+    fn verify_witness_rejects_tampered_witness() {
+        let div = [0x55; 16];
+        let seed = 3u32;
+        let prefix = b"test";
+        let mut wit = witness(&div, seed, prefix);
+        wit[0] ^= 0x01;
+        assert!(!verify_witness(&div, seed, prefix, &wit));
+    }
+
+    // ---- verify_witness_local integration ----
+
+    #[test]
+    fn verify_local_valid_same_cell() {
+        // Two devices in same cell, same marks → same truncated sketches
+        let marks = [
+            [0x01u8; 16], [0x02u8; 16], [0x03u8; 16], [0x04u8; 16],
+            [0x05u8; 16], [0x06u8; 16], [0x07u8; 16], [0x08u8; 16],
+            [0x09u8; 16], [0x0Au8; 16], [0x0Bu8; 16], [0x0Cu8; 16],
+            [0x0Du8; 16], [0x0Eu8; 16], [0x0Fu8; 16], [0x10u8; 16],
+        ];
+        let rssi = [0i8; 16];
+        let seed = 42u32;
+        // Both devices see identical marks → identical sketches
+        let local = observe(&marks, &rssi, seed, -100);
+        let sender = observe(&marks, &rssi, seed, -100);
+        let claimed_div = sketch_to_div_sketch(&sender);
+        let prefix = b"frame prefix bytes for witness test";
+        let wit = witness(&claimed_div, seed, prefix);
+        let verdict = verify_witness_local(&local, &claimed_div, seed, prefix, &wit, 0.5);
+        assert_eq!(verdict, WitVerdict::Valid, "same marks → same sketch → Valid");
+    }
+
+    #[test]
+    fn verify_local_cell_mismatch_different_marks() {
+        // Device A hears marks 1..16, device B hears marks 17..32 → no overlap
+        let marks_a: Vec<[u8; 16]> = (1u8..=16).map(|i| [i; 16]).collect();
+        let marks_b: Vec<[u8; 16]> = (17u8..=32).map(|i| [i; 16]).collect();
+        let rssi = [0i8; 16];
+        let seed = 99u32;
+        let local = observe(&marks_a, &rssi, seed, -100);
+        let sender = observe(&marks_b, &rssi, seed, -100);
+        let claimed_div = sketch_to_div_sketch(&sender);
+        let prefix = b"mismatch test";
+        let wit = witness(&claimed_div, seed, prefix);
+        let verdict = verify_witness_local(&local, &claimed_div, seed, prefix, &wit, 0.5);
+        assert_eq!(
+            verdict,
+            WitVerdict::CellMismatch,
+            "non-overlapping marks → CellMismatch"
+        );
+    }
+
+    #[test]
+    fn verify_local_stale_bad_mac() {
+        let marks = [[0xAAu8; 16]; 16];
+        let rssi = [0i8; 16];
+        let seed = 1u32;
+        let local = observe(&marks, &rssi, seed, -100);
+        let claimed_div = [0xBB; 16]; // wrong div_sketch
+        let prefix = b"stale test";
+        let bad_wit = [0xFF; 16]; // garbage witness
+        let verdict = verify_witness_local(&local, &claimed_div, seed, prefix, &bad_wit, 0.5);
+        assert_eq!(verdict, WitVerdict::Stale, "bad MAC → Stale");
+    }
+
+    // ---- Known-Answer Test (KAT) ----
+
+    #[test]
+    fn witness_kat() {
+        // Independent vector: div_sketch = 0x00..0x0F, seed = 0xDEADBEEF,
+        // prefix = b"mesh-core PoCP witness KAT v1"
+        let div: [u8; 16] = core::array::from_fn(|i| i as u8);
+        let seed = 0xDEADBEEFu32;
+        let prefix = b"mesh-core PoCP witness KAT v1";
+        let wit = witness(&div, seed, prefix);
+
+        // Expected witness computed independently.
+        // Key = blake3::derive_key("mesh-core:v1:pocp-wit", 0x0001..0F || 0xEFBEADDE)
+        // MAC = blake3::keyed_hash(key, prefix)[..16]
+        let expected: [u8; 16] = [
+            0x3D, 0xC7, 0xF8, 0x90, 0xE8, 0x2D, 0xE0, 0xAA,
+            0x5A, 0xF6, 0xA6, 0xC0, 0xD1, 0xD1, 0x1A, 0xB6,
+        ];
+        assert_eq!(wit, expected, "KAT: witness must match independent vector");
+
+        // Verify round-trip
+        assert!(verify_witness(&div, seed, prefix, &wit));
+    }
 }

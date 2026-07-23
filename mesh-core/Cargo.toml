@@ -14,8 +14,10 @@ arrayref = "=0.3.9"
 blake3 = "=1.8.5"
 chacha20poly1305 = "=0.11.0"
 ed25519-dalek = "=3.0.0"
+x25519-dalek = { version = "=2.0.1", features = ["static_secrets"] }
 getrandom = "0.3"
 uniffi = { version = "=0.32.0", features = ["cli"] }
+hex = "0.4"
 
 # uniffi-bindgen binary (library mode): generates Kotlin + Swift from the built cdylib.
 [[bin]]

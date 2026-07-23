@@ -1,0 +1,38 @@
+[package]
+name = "cockroachat-laptop"
+version = "0.1.0"
+edition = "2021"
+description = "Linux laptop BLE mesh chat client — full cockroachat protocol node"
+license = "AGPL-3.0-or-later"
+
+[[bin]]
+name = "cockroachat-laptop"
+path = "src/main.rs"
+
+[dependencies]
+mesh-core = { path = "../mesh-core" }
+
+# BLE via BlueZ D-Bus — 0.17.4 is current stable; "bluetoothd" feature
+# enables the Adapter/Advertisement/Device API over D-Bus.
+bluer = { version = "0.17", features = ["bluetoothd"] }
+
+# Async runtime.
+tokio = { version = "1", features = ["full"] }
+
+# Async stream combinators (SelectAll, StreamExt, pin_mut!).
+futures = "0.3"
+
+# Secure random seed.
+getrandom = "0.2"
+
+# Local-time formatting for received-frame log lines.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+# CLI argument parsing.
+clap = { version = "4", features = ["derive"] }
+
+# Error propagation in main.
+anyhow = "1"
+
+# UUID parsing ("6c6f6361-..." literal).
+uuid = { version = "1", features = ["v4"] }

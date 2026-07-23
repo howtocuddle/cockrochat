@@ -11,8 +11,8 @@ android {
         applicationId = "org.cockroachat.mesh"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1-debug"
+        versionCode = 3
+        versionName = "0.3-fullrestart"
         // Debug/measurement build: everything tunable in-app; nothing baked as a release secret.
     }
 
@@ -20,6 +20,18 @@ android {
         debug {
             isMinifyEnabled = false
             isDebuggable = true
+        }
+    }
+
+    flavorDimensions += "ui"
+    productFlavors {
+        create("rig") {
+            dimension = "ui"
+            applicationIdSuffix = ".rig"
+            versionNameSuffix = "-rig"
+        }
+        create("live") {
+            dimension = "ui"
         }
     }
 
@@ -47,4 +59,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     // UniFFI-generated Kotlin bindings use JNA at runtime.
     implementation("net.java.dev.jna:jna:5.14.0@aar")
+    // EncryptedSharedPreferences for at-rest protection of pairing keys (A3).
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    // On-device QR encoding/decoding for out-of-band pairing. No key material is sent to a server.
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 }

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#0E1116</color>
+    <color name="bg">#0E1116</color>
+    <color name="surface">#1A1F27</color>
+    <color name="surface_variant">#232A34</color>
+    <color name="on_surface">#E6E9EF</color>
+    <color name="on_surface_muted">#9AA4B2</color>
+    <color name="accent">#37C8A6</color>
+    <color name="tier_local">#37C8A6</color>
+    <color name="tier_local_dim">#1E6B5B</color>
+    <color name="tier_broadcast">#4C8DF6</color>
+    <color name="tier_broadcast_dim">#2A4C86</color>
+    <color name="tier_private">#A66BF0</color>
+    <color name="tier_private_dim">#5A3A86</color>
+    <color name="panic">#E4443A</color>
+    <color name="on_panic">#FFFFFF</color>
+</resources>

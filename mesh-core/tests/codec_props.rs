@@ -6,7 +6,7 @@ use proptest::prelude::*;
 // ---------------------------------------------------------------------------
 
 proptest! {
-    /// Any vec whose length != 194 must return BadLen.
+    /// Any vec whose length != FRAME_LEN must return BadLen.
     #[test]
     fn decode_rejects_wrong_len(bytes in proptest::collection::vec(any::<u8>(), 0usize..400usize)) {
         prop_assume!(bytes.len() != FRAME_LEN);
@@ -27,18 +27,19 @@ proptest! {
         epoch   in any::<u32>(),
         body    in any::<[u8;64]>(),
         pocp_wit in any::<[u8;16]>(),
+        pk      in any::<[u8;32]>(),
         sig     in any::<[u8;64]>(),
         reserved in any::<[u8;12]>(),
         msg_type_raw in 1u8..=2u8,
     ) {
         let msg_type = MsgType::from_u8(msg_type_raw).unwrap();
-        let f = Frame { mark, version: PROTO_VERSION, msg_type, div_sketch, epoch, body, pocp_wit, sig, reserved };
+        let f = Frame { mark, version: PROTO_VERSION, msg_type, div_sketch, epoch, body, pocp_wit, pk, sig, reserved };
         let encoded = encode(&f);
         let decoded = decode(&encoded).unwrap();
         prop_assert_eq!(decoded, f);
     }
 
-    /// For a valid 194-byte buffer, decode then encode is identity.
+    /// For a valid FRAME_LEN-byte buffer, decode then encode is identity.
     #[test]
     fn roundtrip_decode_encode(
         mut buf in proptest::collection::vec(any::<u8>(), FRAME_LEN..=FRAME_LEN),
@@ -74,12 +75,12 @@ fn bad_type_returns_bad_type() {
 
 #[test]
 fn short_buf_returns_bad_len() {
-    let buf = [0u8; 193];
+    let buf = [0u8; 225];
     assert_eq!(decode(&buf), Err(DecodeErr::BadLen));
 }
 
 #[test]
 fn long_buf_returns_bad_len() {
-    let buf = [0u8; 195];
+    let buf = [0u8; 227];
     assert_eq!(decode(&buf), Err(DecodeErr::BadLen));
 }
