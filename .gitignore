@@ -23,3 +23,8 @@ api.qrserver.png
 **/*.rs.bk
 .DS_Store
 
+# Session & Chat logs
+session-*.md
+Claude_Chat_*.md
+
+
