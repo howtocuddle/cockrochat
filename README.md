@@ -31,8 +31,27 @@ During protests, civil demonstrations, or natural disasters, cellular networks a
 | Component | Platform | Details |
 |:---|:---|:---|
 | **`mesh-core`** | Rust (Core Library) | Contains all protocol parsing, security, cryptography, and relay state machine. |
-| **`android`** | Kotlin (Android App) | Foreground Service handling BLE 5.0 Extended Advertising and UI rendering. |
+| **`android`** | Kotlin (Android App) | Dual-flavor Android app with XML Views, BLE 5.0 Foreground Service, and tier-colored chat bubbles. |
 | **`laptop`** | Rust (Linux Desktop) | Native Linux testing client built on BlueZ for desktop debugging & fixed relay nodes. |
+
+### Android Build Flavors
+
+The Android app ships as two build flavors from a single codebase, each launching a different entry activity:
+
+| Flavor | Entry Activity | Purpose |
+|:---|:---|:---|
+| **`live`** | `ChatActivity` | End-user messaging app — clean chat-bubble UI with tier selector (Local / Broadcast / Private 🔒), QR-code contact pairing, and panic wipe. |
+| **`rig`** | `MainActivity` | Field-testing debug tool — live BLE stats, config editor (epoch, τ, RSSI floor, coded PHY), KMV sketch comparison (Jaccard distance), debug log, and measurement export. |
+
+Both flavors share the same `MeshService` foreground service and Rust core. The `rig` flavor includes a button to open `ChatActivity` for message testing alongside the debug instruments.
+
+#### UI Details
+
+- **XML Views** — all UI is built with Android XML layouts (`activity_chat.xml`, `activity_main.xml`) and Kotlin view binding, replacing the earlier Jetpack Compose implementation.
+- **Tier-Colored Chat Bubbles** — messages are rendered as rounded bubbles color-coded by tier: teal (Local), blue (Broadcast), purple (Private). Own messages use bright colors; received messages use dimmed variants.
+- **QR Pairing Dialog** — in-app QR code generation and scanning (via ZXing) for out-of-band X25519 key exchange. No internet or account required.
+- **Screenshot Protection** — `FLAG_SECURE` prevents screenshots and screen recording on both activities (state-actor threat model).
+- **Hold-to-Wipe** — panic wipe requires a 1.5-second long-press to prevent accidental activation.
 
 ---
 
