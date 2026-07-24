@@ -45,6 +45,19 @@ The Android app ships as two build flavors from a single codebase, each launchin
 
 Both flavors share the same `MeshService` foreground service and Rust core. The `rig` flavor includes a button to open `ChatActivity` for message testing alongside the debug instruments.
 
+<div align="center">
+<table>
+<tr>
+<td align="center"><strong><code>live</code> — ChatActivity</strong></td>
+<td align="center"><strong><code>rig</code> — MainActivity (Field Tool)</strong></td>
+</tr>
+<tr>
+<td><img src="docs/screenshot-live.jpg" width="300" alt="Live flavor: chat UI with tier-colored bubbles" /></td>
+<td><img src="docs/screenshot-rig.jpg" width="300" alt="Rig flavor: BLE Mesh Field Tool with config editor and sketch comparison" /></td>
+</tr>
+</table>
+</div>
+
 #### UI Details
 
 - **XML Views** — all UI is built with Android XML layouts (`activity_chat.xml`, `activity_main.xml`) and Kotlin view binding, replacing the earlier Jetpack Compose implementation.
