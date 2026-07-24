@@ -69,6 +69,36 @@ The protocol uses a 3-tier messaging model to balance latency, crowd coverage, a
 2. **Tier 2 — Crowd-Relayed Regional Alerts**: Multi-hop alerts propagated through the mesh. Confidence scales through **Spatial Diversity** (corroboration across distinct physical crowd cells). Re-broadcast frequency automatically adjusts to crowd density via Trickle.
 3. **Tier 3 — Encrypted Direct Messages**: Pairwise private messages between trusted contacts with built-in spam protection (Proof-of-Work).
 
+### Real-World Crowd Propagation Examples
+
+#### **Tier 1 Example: Immediate Local Alert (1-Hop / Direct RF Range)**
+* **Scenario**: A user at the **North Gate** sees teargas deployed nearby and sends an immediate local alert *"TEAR GAS AT NORTH GATE"*.
+* **Flow**:
+  1. The frame is generated with `TTL = 0` and `MsgType::LocalImmediate`.
+  2. Broadcasted directly via BLE Extended Advertising to all devices within **10–30 meters** (1-hop direct radio range).
+  3. **Display**: Displays **instantly** on screens of nearby devices in direct range.
+  4. **Propagation**: **Never relayed** by receiving nodes (`relay_decision` returns `None`).
+  5. **Beacon Entropy**: Nearby devices collect the frame's sender mark as a physical co-presence witness (`localImmediateMarks`) to generate beacon entropy for key rotation.
+
+#### **Tier 2 Example: Crowd-Relayed Regional Mesh Broadcast (Multi-Hop / Spatial Diversity)**
+* **Scenario**: A user at the **North Gate** broadcasts a regional warning *"POLICE KETTLING NORTH EXIT"*.
+* **Flow**:
+  1. **Origination**: The packet is sent with `TTL = 8` (`MsgType::RegionalPropagated`) carrying the sender's local cell sketch (**Locale A** / North Gate).
+  2. **Relaying Without Display**: Nearby phones in Locale A receive the packet. Because the packet has only been seen in 1 locale (`distinct = 1`), phones **do not display it yet** to prevent single-source panic stampedes. Instead, they immediately **relay the packet** over BLE (`relayOnly = true`).
+  3. **Mesh Hopping**: The packet hops phone-to-phone across the crowd (taking milliseconds per hop). When it travels 60 meters to the **Central Stage** (**Locale B**), receiving nodes compare the North Gate sketch (**Locale A**) with their own ambient Bluetooth environment (**Locale B**).
+  4. **Spatial Diversity Corroboration**: Because Locale A and Locale B have distinct surrounding Bluetooth signals (`Jaccard < τ`), `trust.recordVerification` returns **`distinct = 2`**.
+  5. **Display Unlock**: The moment `distinct >= 2`, the anti-panic lock releases, and the alert **instantly pops up on screens across the Central Stage, North Gate, and the rest of the crowd mesh**!
+  6. **Loop Suppression**: Originators stop re-broadcasting once they hear their own reflection (`ownFrameHash`), and relay nodes suppress duplicates using a bounded time-decaying deduplication filter (`FfiDedup`).
+
+#### **Tier 3 Example: Encrypted Direct Private Chat (End-to-End AEAD / Oblivious Mesh)**
+* **Scenario**: Alice wants to send a private message to Bob *"Meet at South Entrance in 10 mins"* in a dense crowd.
+* **Flow**:
+  1. **Proof-of-Work & Encryption**: Alice's phone computes a VDL proof-of-work witness (~seconds of CPU) to rate-limit spam and encrypts the 47-byte body using ChaCha20-Poly1305 under their shared pairing key (`pairKey`).
+  2. **No Recipient Address on Wire**: The frame contains no recipient address, phone number, or user ID.
+  3. **Oblivious Multi-Hop Relay**: Intermediary nodes in the crowd verify the Ed25519 signature and VDL PoW witness. They **cannot read the message or know who it is for**, but they decrement TTL by 1 and relay it across the mesh (`advertiseRelayOnce`).
+  4. **Constant-Time Trial Decryption**: As Bob's phone (and all receiving phones) receives the frame, it trial-decrypts the body against all paired contact keys in sequence without breaking early (preventing timing side-channel attacks).
+  5. **Delivery**: Bob's phone successfully authenticates the Poly1305 tag and displays `🔒 Alice: Meet at South Entrance in 10 mins`.
+
 ---
 
 ## Implementation Status (v0)
