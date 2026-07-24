@@ -31,40 +31,51 @@ During protests, civil demonstrations, or natural disasters, cellular networks a
 | Component | Platform | Details |
 |:---|:---|:---|
 | **`mesh-core`** | Rust (Core Library) | Contains all protocol parsing, security, cryptography, and relay state machine. |
-| **`android`** | Kotlin (Android App) | Dual-flavor Android app with XML Views, BLE 5.0 Foreground Service, and tier-colored chat bubbles. |
+| **`android`** | Kotlin (Android App) | Single-activity Jetpack Compose app with AMOLED industrial UI, BLE 5.0 Foreground Service, and left settings drawer. |
 | **`laptop`** | Rust (Linux Desktop) | Native Linux testing client built on BlueZ for desktop debugging & fixed relay nodes. |
 
-### Android Build Flavors
+### Android UI (v0.5-unified)
 
-The Android app ships as two build flavors from a single codebase, each launching a different entry activity:
-
-| Flavor | Entry Activity | Purpose |
-|:---|:---|:---|
-| **`live`** | `ChatActivity` | End-user messaging app — clean chat-bubble UI with tier selector (Local / Broadcast / Private 🔒), QR-code contact pairing, and panic wipe. |
-| **`rig`** | `MainActivity` | Field-testing debug tool — live BLE stats, config editor (epoch, τ, RSSI floor, coded PHY), KMV sketch comparison (Jaccard distance), debug log, and measurement export. |
-
-Both flavors share the same `MeshService` foreground service and Rust core. The `rig` flavor includes a button to open `ChatActivity` for message testing alongside the debug instruments.
+The Android app is a single unified Jetpack Compose activity combining a full-screen messaging interface with a slide-out control panel.
 
 <div align="center">
 <table>
 <tr>
-<td align="center"><strong><code>live</code> — ChatActivity</strong></td>
-<td align="center"><strong><code>rig</code> — MainActivity (Field Tool)</strong></td>
+<td align="center"><strong>Chat — messaging interface</strong></td>
+<td align="center"><strong>Drawer — control panel</strong></td>
 </tr>
 <tr>
-<td><img src="docs/screenshot-live.jpg" width="300" alt="Live flavor: chat UI with tier-colored bubbles" /></td>
-<td><img src="docs/screenshot-rig.jpg" width="300" alt="Rig flavor: BLE Mesh Field Tool with config editor and sketch comparison" /></td>
+<td><img src="docs/screenshot-chat.jpg" width="300" alt="Chat interface with tier-colored bubbles, trust meters, and segmented tier selector" /></td>
+<td><img src="docs/screenshot-drawer.jpg" width="300" alt="Left drawer with guide, detector, settings, diagnostics, and panic wipe" /></td>
 </tr>
 </table>
 </div>
 
-#### UI Details
+#### Design: AMOLED Industrial
 
-- **XML Views** — all UI is built with Android XML layouts (`activity_chat.xml`, `activity_main.xml`) and Kotlin view binding, replacing the earlier Jetpack Compose implementation.
-- **Tier-Colored Chat Bubbles** — messages are rendered as rounded bubbles color-coded by tier: teal (Local), blue (Broadcast), purple (Private). Own messages use bright colors; received messages use dimmed variants.
+- **True Black Canvas** — `#000000` background with near-black panels (`#0A0A0C`), designed for AMOLED power savings and protest low-visibility use.
+- **Monospace Typography** — all text uses monospaced fonts with wide letter-spacing for a tactical, industrial aesthetic.
+- **Tier-Colored Accents** — the only saturated colors are the three tier accents: teal (`LOCAL`), blue (`BROADCAST`), purple (`PRIVATE`), plus red for panic.
+
+#### Chat Interface
+
+- **Tier-Colored Chat Bubbles** — messages rendered in a `LazyColumn` with rounded surfaces. Own messages use semi-transparent tier-colored backgrounds with matching borders; received messages use dark panel backgrounds with hairline borders.
+- **Trust Meter** — each received message shows a 3-bar signal meter indicating delivery path: `▮▮▮ DIRECT` (sender physically near) or `▮▮ RELAYED` (carried by mesh hops), plus proof type (`VERIFIED`, `CORROBORATED`, or `E2E`).
+- **Segmented Tier Selector** — bottom composer includes a color-coded segmented control for switching between `LOCAL`, `BROADCAST`, and `PRIVATE` tiers, with a live byte counter.
 - **QR Pairing Dialog** — in-app QR code generation and scanning (via ZXing) for out-of-band X25519 key exchange. No internet or account required.
-- **Screenshot Protection** — `FLAG_SECURE` prevents screenshots and screen recording on both activities (state-actor threat model).
-- **Hold-to-Wipe** — panic wipe requires a 1.5-second long-press to prevent accidental activation.
+
+#### Left Drawer (☰ → Control Panel)
+
+- **GUIDE** — explains when to use each tier, with expandable cards showing use-case, reach, and trust level. Includes a trust meter legend.
+- **DETECTOR** — live proximity readout showing how many devices' frames arrive direct (no relay hop), with signal strength bars and epoch stats.
+- **SETTINGS** — every tunable parameter: epoch length, beacon floor, τ threshold, RSSI floor, coded PHY, low-latency scan, message repeat epochs.
+- **DIAGNOSTICS** — merged rig toolset: export/clear debug log, export measurement JSON, copy/compare KMV sketches (Jaccard distance).
+- **PANIC** — hold-to-wipe button that erases all pairing keys, contacts, config, and logs. Irreversible.
+
+#### Security
+
+- **Screenshot Protection** — `FLAG_SECURE` prevents screenshots and screen recording (state-actor threat model).
+- **AMOLED Black Status/Nav Bars** — system bars blacked out to match the UI and reduce visual signature.
 
 ---
 

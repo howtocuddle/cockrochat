@@ -44,16 +44,15 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Cockroachat">
 
-        <!-- K12: base declares both non-exported. Each flavor manifest re-declares its
-             launcher activity with android:exported="true" (required for the LAUNCHER
-             intent-filter); the non-launcher activity stays exported="false". -->
+        <!-- Single unified app: one activity hosts the messaging UI and the settings drawer. -->
         <activity
             android:name=".MainActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".ChatActivity"
-            android:exported="false" />
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <service
             android:name=".MeshService"

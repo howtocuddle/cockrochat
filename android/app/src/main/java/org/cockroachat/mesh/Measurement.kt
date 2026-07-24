@@ -21,14 +21,17 @@ class Measurement {
     // Per-epoch set of distinct mark hex strings for fast neighbor counting
     private val epochMarks = ConcurrentHashMap<UInt, MutableSet<String>>()
 
-    // Continuously-refreshed presence: updated on EVERY heard frame (before dedup), unlike
-    // `rows`/`epochMarks` which are gated by dedup and feed the KMV sketch. Bounds memory.
-    private val presence = ConcurrentHashMap<String, Pair<Int, Long>>()
+    // Direct-RF presence: marks heard at their origination TTL (relays excluded upstream),
+    // bucketed by the frame's epoch. Marks rotate every epoch, so the previous wall-clock
+    // window counted one physical phone 2–3 times (2–3 of its rotating marks in window).
+    // Per-epoch buckets + max (NOT sum) cannot double-count: one device = one mark per
+    // epoch. Relayed copies never land here (TTL-direct gate at the call site), so a
+    // device two hops away is not "nearby".
+    private val directMarks = ConcurrentHashMap<UInt, MutableSet<String>>()
 
     private companion object {
         const val MAX_ROWS = 4000
         const val MAX_EPOCHS = 32
-        const val MAX_PRESENCE = 256
     }
 
     fun record(mark: ByteArray, rssi: Int, epoch: UInt) {
@@ -46,12 +49,15 @@ class Measurement {
         }
     }
 
-    /** Record a heard mark for presence. Called on every fresh in-window frame, before dedup. */
-    fun recordPresence(mark: ByteArray, rssi: Int) {
+    /** Record a DIRECT-RF mark for presence. Called before dedup, only for frames at
+     *  their origination TTL (relays excluded). Bucketed by the frame's own epoch. */
+    fun recordPresence(mark: ByteArray, epoch: UInt) {
         val hex = mark.joinToString("") { "%02x".format(it) }
-        presence[hex] = rssi to System.currentTimeMillis()
-        if (presence.size > MAX_PRESENCE) {
-            presence.entries.minByOrNull { it.value.second }?.key?.let { presence.remove(it) }
+        directMarks.computeIfAbsent(epoch) {
+            java.util.Collections.synchronizedSet(HashSet<String>())
+        }.add(hex)
+        if (directMarks.size > MAX_EPOCHS) {
+            directMarks.keys.minOrNull()?.let { directMarks.remove(it) }
         }
     }
 
@@ -60,18 +66,20 @@ class Measurement {
     }
 
     /**
-     * Number of distinct rotating marks heard on DIRECT RF within a recent wall-clock window.
-     *
-     * Deliberately separate from [neighborsThisEpoch] (epoch buckets feed the KMV rig) and
-     * deliberately NOT RSSI-filtered: any frame that decoded and verified is a real
-     * transmission. The −80 dBm config floor is a *sketch/trust* window, not a liveness
-     * window — applying it here made the count flicker whenever a peer's RSSI crossed the
-     * boundary, while its messages kept flowing. Relayed copies are excluded upstream
-     * (only undecremented-TTL frames reach [recordPresence]).
+     * Estimated nearby devices: max (not sum) of the direct-RF mark counts of the current
+     * and adjacent epoch buckets. Adjacent buckets cover sender/receiver epoch skew and
+     * one fully-missed epoch; zero requires two consecutive silent epochs (~20 s), the
+     * same smoothing horizon as before but rotation-proof. Deliberately not RSSI-filtered:
+     * any frame that decoded and verified is a real transmission — the −80 dBm config
+     * floor is a sketch/trust window, not a liveness window.
      */
-    fun neighborsRecently(windowMs: Long): Int {
-        val cutoff = System.currentTimeMillis() - windowMs
-        return presence.count { (_, v) -> v.second >= cutoff }
+    fun neighborsDirect(epoch: UInt): Int {
+        // epoch-1 wraps to UInt.MAX_VALUE at epoch 0; that bucket never exists → 0.
+        return maxOf(
+            directMarks[epoch]?.size ?: 0,
+            directMarks[epoch - 1u]?.size ?: 0,
+            directMarks[epoch + 1u]?.size ?: 0
+        )
     }
 
     fun totalHeard(): Int = synchronized(rowsLock) { rows.size }
@@ -125,6 +133,6 @@ class Measurement {
     fun clear() {
         synchronized(rowsLock) { rows.clear() }
         epochMarks.clear()
-        presence.clear()
+        directMarks.clear()
     }
 }

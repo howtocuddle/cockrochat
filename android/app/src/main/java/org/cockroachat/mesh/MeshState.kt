@@ -23,7 +23,10 @@ data class MsgRow(
     val rssi: Int?,
     val text: String,
     val mine: Boolean,
-    val tier: SendTier = SendTier.BROADCAST
+    val tier: SendTier = SendTier.BROADCAST,
+    /** True when the frame arrived at its origination TTL — straight off the sender's
+     *  radio, no relay hop. Drives the per-message trust meter. */
+    val direct: Boolean = false
 )
 
 enum class SendTier { LOCAL, BROADCAST, PRIVATE }
@@ -85,6 +88,14 @@ object MeshState {
     // A one-shot private message request. The service consumes it (VDL solve + seal + advertise)
     // then resets it to null. Non-null means "a private send is queued or in progress".
     val outgoingPrivate = MutableStateFlow<PrivateSend?>(null)
+
+    /** Delivery-receipt notice shown above the composer ("carried by mesh", "received by a
+     *  nearby peer", "stopped without confirmation"). Null = nothing to show. Set by the
+     *  service on reflection/expiry; cleared when a new message is composed. */
+    val receipt = MutableStateFlow<String?>(null)
+
+    /** Bumped whenever the pairing contact list changes so the UI recomposes. */
+    val contactsVersion = MutableStateFlow(0)
 
     @Volatile
     var outgoingSetAtEpoch: UInt? = null

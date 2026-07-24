@@ -675,6 +675,8 @@ internal object IntegrityCheckingUniffiLib {
     }
     external fun uniffi_mesh_core_checksum_func_beacon_entropy(
     ): Int
+    external fun uniffi_mesh_core_checksum_func_default_ttl_local(
+    ): Int
     external fun uniffi_mesh_core_checksum_func_default_ttl_regional(
     ): Int
     external fun uniffi_mesh_core_checksum_func_frame_body_text(
@@ -811,6 +813,8 @@ internal object UniffiLib {
     ): Int
     external fun uniffi_mesh_core_fn_func_beacon_entropy(`marksFlat`: RustBuffer.ByValue,`minHearers`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_default_ttl_local(uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
     external fun uniffi_mesh_core_fn_func_default_ttl_regional(uniffi_out_err: UniffiRustCallStatus, 
     ): Int
     external fun uniffi_mesh_core_fn_func_frame_body_text(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -989,7 +993,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_mesh_core_checksum_func_beacon_entropy() != 30738) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_mesh_core_checksum_func_default_ttl_regional() != 53397) {
+    if (lib.uniffi_mesh_core_checksum_func_default_ttl_local() != 49739) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_default_ttl_regional() != 11880) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_func_frame_body_text() != 60133) {
@@ -2812,13 +2819,27 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
     
 
         /**
+         * Origination TTL for LocalImmediate frames — see [`default_ttl_regional`] for why the
+         * shim must read this from the core. Local frames originate at this TTL and relays
+         * clobber to 0, so `ttl == default_ttl_local` ⇔ direct RF from the originator.
+         */ fun `defaultTtlLocal`(): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_default_ttl_local(
+    
+        _status)
+}
+    )
+    }
+    
+
+        /**
          * The TTL a RegionalPropagated or Private frame carries AT ORIGINATION.
          *
-         * Presence / direct-RF detection: relays always decrement, so a received frame of
-         * msg_type 2 or 3 whose TTL still equals this value came straight from the originator
-         * (direct RF), while any lower TTL arrived via the relay path. LocalImmediate frames
-         * (TTL 0) are never relayed and are always direct. Kept in Rust so the shim never
-         * hardcodes protocol constants (invariant #1).
+         * Presence / direct-RF detection: relays always decrement (regional/private) or clobber
+         * to 0 (local), so a received frame whose TTL still equals its type's origination TTL
+         * came straight from the originator (direct RF), while any lower TTL arrived via the
+         * relay path. Kept in Rust so the shim never hardcodes protocol constants (invariant #1).
          */ fun `defaultTtlRegional`(): kotlin.UInt {
             return FfiConverterUInt.lift(
     uniffiRustCall() { _status ->

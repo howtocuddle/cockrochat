@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -11,8 +12,8 @@ android {
         applicationId = "org.cockroachat.mesh"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3-fullrestart"
+        versionCode = 5
+        versionName = "0.5-unified"
         // Debug/measurement build: everything tunable in-app; nothing baked as a release secret.
     }
 
@@ -23,16 +24,9 @@ android {
         }
     }
 
-    flavorDimensions += "ui"
-    productFlavors {
-        create("rig") {
-            dimension = "ui"
-            applicationIdSuffix = ".rig"
-            versionNameSuffix = "-rig"
-        }
-        create("live") {
-            dimension = "ui"
-        }
+    buildFeatures {
+        compose = true
+        buildConfig = true
     }
 
     compileOptions {
@@ -63,4 +57,12 @@ dependencies {
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     // On-device QR encoding/decoding for out-of-band pairing. No key material is sent to a server.
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    // Compose UI (single unified app: messaging screen + left settings drawer).
+    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    debugImplementation("androidx.compose.ui:ui-tooling")
 }

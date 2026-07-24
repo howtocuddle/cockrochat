@@ -18,6 +18,7 @@ import uniffi.mesh_core.BeaconFfi
 import uniffi.mesh_core.FfiDedup
 import uniffi.mesh_core.FfiTrust
 import uniffi.mesh_core.beaconEntropy
+import uniffi.mesh_core.defaultTtlLocal
 import uniffi.mesh_core.defaultTtlRegional
 import uniffi.mesh_core.frameBodyText
 import uniffi.mesh_core.frameDecodes
@@ -82,6 +83,12 @@ class MeshService : LifecycleService() {
     /** Hash of our currently-advertised public frame — used to hear our own reflection
      *  coming back through the mesh (send-and-listen). Cleared after one reaction. */
     private var ownFrameHash: ByteArray? = null
+
+    /** Set when a relayed echo of our frame is heard (receipt). For LOCAL-tier messages
+     *  this is the ONLY stop condition: they re-originate every epoch until received.
+     *  Reset when new outgoing text is composed. */
+    @Volatile
+    private var reflectionHeard = false
 
     /** LocalImmediate marks heard this epoch (for beacon entropy collection).
      *  Guarded by [marksLock]: ingest runs on BLE binder threads, the epoch loop on main. */
@@ -183,6 +190,7 @@ class MeshService : LifecycleService() {
                 val epoch = (nowMs / cfg2.epochMs).toUInt()
                 if (text.isNotEmpty()) {
                     MeshState.outgoingSetAtEpoch = epoch
+                    reflectionHeard = false // new message → wait for a fresh receipt
                 } else {
                     MeshState.outgoingSetAtEpoch = null
                 }
@@ -298,10 +306,25 @@ class MeshService : LifecycleService() {
                     // Outgoing auto-expire
                     val text = MeshState.outgoingText.value
                     if (text.isNotEmpty()) {
-                        val setAt = MeshState.outgoingSetAtEpoch
-                        if (setAt != null && epoch >= setAt && epoch - setAt >= cfg.messageRepeatEpochs.toUInt()) {
-                            MeshState.outgoingText.value = ""
-                            MeshState.logDebug("outgoing message expired after ${cfg.messageRepeatEpochs} epochs")
+                        if (MeshState.outgoingTier.value == SendTier.LOCAL) {
+                            // Local tier: NO epoch cap. Re-originate every epoch until a
+                            // relayed echo proves an in-cell peer received the message
+                            // (reflection = receipt). The 3-epoch cap stays for Broadcast.
+                            if (reflectionHeard) {
+                                reflectionHeard = false
+                                MeshState.outgoingText.value = ""
+                                MeshState.logDebug("local message received (reflection) — stopped re-originating")
+                            }
+                        } else {
+                            val setAt = MeshState.outgoingSetAtEpoch
+                            if (setAt != null && epoch >= setAt && epoch - setAt >= cfg.messageRepeatEpochs.toUInt()) {
+                                MeshState.outgoingText.value = ""
+                                if (MeshState.receipt.value == null) {
+                                    MeshState.receipt.value =
+                                        "broadcast stopped after ${cfg.messageRepeatEpochs} epochs — no peer confirmation"
+                                }
+                                MeshState.logDebug("outgoing message expired after ${cfg.messageRepeatEpochs} epochs")
+                            }
                         }
                     }
 
@@ -314,7 +337,7 @@ class MeshService : LifecycleService() {
                     rebuildAndAdvertise(epoch, cfg, currentText)
 
                     // Log epoch rollover with neighbor/total counts
-                    val neighbors = MeshState.measurement.neighborsThisEpoch(epoch)
+                    val neighbors = MeshState.measurement.neighborsDirect(epoch)
                     val total = MeshState.measurement.totalHeard()
                     MeshState.logDebug(
                         "epoch rollover: epoch=$epoch neighbors=$neighbors total=$total"
@@ -323,19 +346,11 @@ class MeshService : LifecycleService() {
 
                 // Recompute stats and push to state
                 val sketch = MeshState.measurement.localSketch(epoch, seed, cfg.rssiFloorDbm)
-                // Presence must not depend on the remote device sharing our epoch.  The KMV rig
-                // keeps its epoch buckets below, but the user-facing nearby count is a recent
-                // direct-RF observation window.  A rotating mark can make a peer count twice at
-                // an epoch boundary; showing zero for a peer that is actively delivering frames
-                // is substantially worse and was the observed failure mode.
-                val neighbors = maxOf(
-                    MeshState.measurement.neighborsThisEpoch(epoch),
-                    MeshState.measurement.neighborsThisEpoch(epoch - 1u),
-                    MeshState.measurement.neighborsThisEpoch(epoch + 1u),
-                    MeshState.measurement.neighborsRecently(
-                        windowMs = maxOf(cfg.epochMs * 2L, 15_000L)
-                    )
-                )
+                // Presence: direct-RF devices counted per epoch bucket. Marks rotate every
+                // epoch, so a 15–20 s wall-clock window counted one phone 2–3 times; max
+                // over adjacent per-epoch buckets can't double-count (one device = one
+                // mark per epoch) and tolerates one fully-missed epoch.
+                val neighbors = MeshState.measurement.neighborsDirect(epoch)
                 val total = MeshState.measurement.totalHeard()
 
                 val stats = Stats(
@@ -436,6 +451,10 @@ class MeshService : LifecycleService() {
         val ownHash = ownFrameHash
         if (ownHash != null && hash.contentEquals(ownHash)) {
             ownFrameHash = null // react once per origination
+            reflectionHeard = true
+            if (MeshState.outgoingText.value.isNotEmpty()) {
+                MeshState.receipt.value = "✓ carried by the mesh — a peer confirmed receipt"
+            }
             val repeat = cfg.messageRepeatEpochs.toLong()
             if (repeat > 0 && MeshState.outgoingText.value.isNotEmpty()) {
                 MeshState.outgoingSetAtEpoch =
@@ -444,21 +463,23 @@ class MeshService : LifecycleService() {
             }
         }
 
-        // Presence: direct-RF liveness only, BEFORE the dedup gate. LocalImmediate frames
-        // are never relayed → always direct. Regional/Private count only at the ORIGINATION
-        // TTL (relays always decrement, so ttl == default_ttl_regional ⇔ straight from the
-        // originator); relayed copies must not register the originator as "nearby".
+        // Presence: direct-RF liveness only, BEFORE the dedup gate. A frame counts only
+        // at its ORIGINATION TTL: relays decrement (regional/private) or clobber to 0
+        // (local), so ttl == origin TTL ⇔ straight from the originator. Relayed copies
+        // must not register the originator as "nearby" — including the relayed echo of
+        // our OWN frame, which would otherwise count us as our own neighbor.
         // Deliberately no RSSI floor: any frame that decoded + verified is a real
         // transmission. The −80 dBm config floor is a sketch/trust window, NOT a liveness
         // window — applying it here made the count flicker at the boundary while messages
         // kept flowing.
+        val localTtl = defaultTtlLocal().toInt()
         val originTtl = defaultTtlRegional().toInt()
         val direct = when (wp?.msgType?.toInt()) {
-            1 -> true // LocalImmediate: never relayed → always direct
+            1 -> frameTtl(bytes)?.toInt() == localTtl
             2, 3 -> frameTtl(bytes)?.toInt() == originTtl
             else -> false
         }
-        if (direct) MeshState.measurement.recordPresence(mark, rssi)
+        if (direct) MeshState.measurement.recordPresence(mark, frameEp)
 
         if (!dedup.checkAndInsertEpoch(hash, frameEp)) return
 
@@ -498,7 +519,8 @@ class MeshService : LifecycleService() {
                         rssi = rssi,
                         text = privatePlaintext,
                         mine = false,
-                        tier = SendTier.PRIVATE
+                        tier = SendTier.PRIVATE,
+                        direct = direct
                     )
                 )
             }
@@ -592,7 +614,8 @@ class MeshService : LifecycleService() {
                             rssi = rssi,
                             text = text,
                             mine = false,
-                            tier = tier
+                            tier = tier,
+                            direct = direct
                         )
                     )
                 }
@@ -619,7 +642,9 @@ class MeshService : LifecycleService() {
 
         val beaconSeed = beacon.seed()
         val localImmediate = MeshState.outgoingTier.value == SendTier.LOCAL
-        val ttl: UByte = if (localImmediate) 0u else 8u
+        // TTL from the Rust core (invariant #1): local = 1 (relayable once so the
+        // reflection receipt can come back), regional/private = 8.
+        val ttl: UByte = if (localImmediate) defaultTtlLocal().toUByte() else defaultTtlRegional().toUByte()
         // H1: include PoCP witness so receivers can verify physical co-presence.
         // Falls back to bare makeMessageFrame when the local sketch is unavailable.
         val sketch = MeshState.measurement.localSketch(epoch, seed, cfg.rssiFloorDbm)
