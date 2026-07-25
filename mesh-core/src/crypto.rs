@@ -92,6 +92,9 @@ pub fn pair_public(sk: &[u8; 32]) -> [u8; 32] {
 /// Derive the shared pairwise message key from our secret and the peer's public key.
 /// Returns None if the DH output is the all-zero point (contributory behaviour check).
 /// Both sides derive the identical key. Domain-separated via blake3 derive_key.
+///
+/// NOTE (A3): a key derived here is STATIC — a seized long-term secret recomputes it and
+/// decrypts all recorded history. New pairings must use [`pair_seed_v2`] + [`pair_ratchet`].
 pub fn pair_derive(our_sk: &[u8; 32], their_pk: &[u8; 32]) -> Option<[u8; 32]> {
     let secret = x25519_dalek::StaticSecret::from(*our_sk);
     let shared = secret.diffie_hellman(&x25519_dalek::PublicKey::from(*their_pk));
@@ -99,6 +102,51 @@ pub fn pair_derive(our_sk: &[u8; 32], their_pk: &[u8; 32]) -> Option<[u8; 32]> {
         return None;
     }
     Some(blake3::derive_key("mesh-core:v1:pairkey", shared.as_bytes()))
+}
+
+/// v2 pairing chain seed (A3 forward secrecy).
+///
+/// `shared` is the [`pair_derive`] output; `salt_a`/`salt_b` are per-pairing random salts
+/// exchanged out-of-band alongside the public keys at pairing time and then DELETED by both
+/// sides. The salts are canonically ordered (lexicographic min first) so both parties derive
+/// the same seed without knowing whose is whose.
+///
+/// Why this delivers actual forward secrecy: the epoch ratchet ([`pair_ratchet`]) is one-way,
+/// and the chain seed cannot be recomputed from the seized long-term secret alone — the
+/// deleted salts are missing entropy. A seized phone therefore yields at most the currently
+/// stored chain state (present epoch forward), never past epochs.
+pub fn pair_seed_v2(shared: &[u8; 32], salt_a: &[u8; 32], salt_b: &[u8; 32]) -> [u8; 32] {
+    let (lo, hi) = if salt_a <= salt_b { (salt_a, salt_b) } else { (salt_b, salt_a) };
+    let mut material = [0u8; 96];
+    material[..32].copy_from_slice(shared);
+    material[32..64].copy_from_slice(lo);
+    material[64..].copy_from_slice(hi);
+    blake3::derive_key("mesh-core:v1:pairseed-v2", &material)
+}
+
+/// Advance a pair-chain key from `from_epoch` to `to_epoch` (A3 forward secrecy).
+///
+/// One step per epoch: `K_e = BLAKE3("mesh-core:v1:pairratchet" || K_{e-1} || e_be_u32)`.
+/// One-way: past keys are unrecoverable from the result. Peers keep only the current and
+/// one previous epoch key (clock-skew tolerance); everything older is deleted.
+///
+/// Returns `None` if `to_epoch < from_epoch` or the span exceeds 8192 steps (DoS bound on
+/// adversarial epoch values from the wire). `to_epoch == from_epoch` returns `key` unchanged.
+pub fn pair_ratchet(key: &[u8; 32], from_epoch: u32, to_epoch: u32) -> Option<[u8; 32]> {
+    if to_epoch < from_epoch {
+        return None;
+    }
+    if to_epoch - from_epoch > 8192 {
+        return None;
+    }
+    let mut k = *key;
+    for e in (from_epoch + 1)..=to_epoch {
+        let mut material = [0u8; 36];
+        material[..32].copy_from_slice(&k);
+        material[32..].copy_from_slice(&e.to_be_bytes());
+        k = blake3::derive_key("mesh-core:v1:pairratchet", &material);
+    }
+    Some(k)
 }
 
 #[cfg(test)]
@@ -243,6 +291,41 @@ mod tests {
         let a_sk: [u8; 32] = core::array::from_fn(|i| i as u8);
         // The identity point as peer public key forces an all-zero DH output.
         assert_eq!(pair_derive(&a_sk, &[0u8; 32]), None);
+    }
+
+    #[test]
+    fn pair_seed_v2_salt_order_invariant() {
+        let shared: [u8; 32] = core::array::from_fn(|i| (i + 7) as u8);
+        let salt_a: [u8; 32] = core::array::from_fn(|i| (i * 3) as u8);
+        let salt_b: [u8; 32] = core::array::from_fn(|i| (i * 5 + 1) as u8);
+        // Both parties must derive the same seed regardless of argument order.
+        assert_eq!(
+            pair_seed_v2(&shared, &salt_a, &salt_b),
+            pair_seed_v2(&shared, &salt_b, &salt_a)
+        );
+        // A different salt set → a different seed.
+        let salt_c: [u8; 32] = core::array::from_fn(|i| (i * 7 + 2) as u8);
+        assert_ne!(
+            pair_seed_v2(&shared, &salt_a, &salt_b),
+            pair_seed_v2(&shared, &salt_a, &salt_c)
+        );
+    }
+
+    #[test]
+    fn pair_ratchet_is_one_way_and_deterministic() {
+        let k0: [u8; 32] = [0x42; 32];
+        // Same span → same key.
+        assert_eq!(pair_ratchet(&k0, 10, 13), pair_ratchet(&k0, 10, 13));
+        // Different span → different key.
+        assert_ne!(pair_ratchet(&k0, 10, 13), pair_ratchet(&k0, 10, 14));
+        // Chaining matches stepping: ratchet(10→11) then (11→13) == ratchet(10→13).
+        let k11 = pair_ratchet(&k0, 10, 11).unwrap();
+        assert_eq!(pair_ratchet(&k11, 11, 13), pair_ratchet(&k0, 10, 13));
+        // Identity span returns the input.
+        assert_eq!(pair_ratchet(&k0, 7, 7), Some(k0));
+        // Backwards and absurd spans are refused.
+        assert_eq!(pair_ratchet(&k0, 13, 10), None);
+        assert_eq!(pair_ratchet(&k0, 0, 9000), None);
     }
 
     #[test]

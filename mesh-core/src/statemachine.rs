@@ -1,61 +1,21 @@
-//! `statemachine` — the message engine. Owns seen-set (time-decaying Bloom, window 2*T_epoch),
-//! Trickle timers (K_supp, W, RSSI-biased slot), TTL/H_max, tier routing, dispatch to `trust`.
+//! `statemachine` — relay decisions + dedup set for the message pipeline.
 //!
-//! PROCESSING ORDER IS ENFORCED HERE AND NON-NEGOTIABLE (invariant #2, v1 §5.5):
-//!   len -> mark-unseen -> sig-verify -> pocp-witness-check -> relay/render.
-//! Nothing is relayed or rendered before validation completes. See README.md §2.
+//! The live ingest pipeline (parse -> verify -> decide, invariant #2) is
+//! `MeshService.ingestFrame` in the platform shim, driven over FFI. This module holds the
+//! two pieces the core owns: the epoch-aware bounded dedup set and the pure relay decision.
+//! The old Rust-side `Engine` (a second, divergent ingest pipeline) was deleted — one
+//! pipeline only, or the two will drift.
 
 use crate::codec::{self, MsgType, FRAME_LEN};
 use crate::crypto;
-use crate::message::{self, DEFAULT_TTL_REGIONAL};
-use crate::pocp::{self, CellSketch};
+use crate::message::DEFAULT_TTL_REGIONAL;
 use crate::vdl;
 use std::collections::{HashMap, VecDeque};
 
-/// Routing tier for an originated message.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Tier {
-    /// Tier-1: local-immediate (single hop, no propagation).
-    LocalImmediate,
-    /// Tier-2: regional-propagated (flood + Trickle + dedup).
-    RegionalPropagated,
-    /// Tier-3: private plane (QR pairing + Noise ratchet). DEFERRED past v0 — interface stub only.
-    Private,
-}
-
-/// A validated, renderable alert handed up to the UI.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Alert {
-    pub id: [u8; 16],
-    pub body: [u8; 64],
-}
-
-/// Why a frame was dropped (never surfaced to the wire; local diagnostics only).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Reason {
-    Decode,
-    StaleEpoch,
-    Seen,
-    BadSig,
-    BadWitness,
-}
-
-/// A security-relevant event to log/alarm (e.g. CellMismatch => relocation/replay).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SecurityEvent {
-    CellMismatch,
-    ChainStall,
-    MalformedStorm,
-}
-
-/// The single decision produced by ingesting a received frame.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Ingest {
-    Relay([u8; FRAME_LEN]),
-    Deliver(Alert),
-    Drop(Reason),
-    Alarm(SecurityEvent),
-}
+/// Per-epoch insertion sub-cap (C8). A flood of distinct valid frames sharing one epoch
+/// bucket can fill at most this many slots, so a single-epoch storm cannot evict the
+/// legitimate hashes of the other live epochs (replay/eviction-window mitigation).
+pub const EPOCH_BUCKET_CAP: usize = 1024;
 
 /// Bounded FIFO-evicting dedup set with time-decaying epoch awareness (E4).
 ///
@@ -71,6 +31,8 @@ pub struct Dedup {
     seen: HashMap<[u8; 16], u32>,
     order: VecDeque<[u8; 16]>,
     cap: usize,
+    /// epoch → live entry count (C8 sub-cap accounting; epoch-0 sentinel entries excluded).
+    epoch_counts: HashMap<u32, usize>,
 }
 
 impl Dedup {
@@ -81,6 +43,7 @@ impl Dedup {
             seen: HashMap::with_capacity(cap),
             order: VecDeque::with_capacity(cap),
             cap,
+            epoch_counts: HashMap::new(),
         }
     }
 
@@ -96,6 +59,10 @@ impl Dedup {
     /// (time-decaying window of ~3 epochs).  Entries stored with epoch 0 (the backwards-compatible
     /// sentinel) are never purged by the time-decay path, only by capacity eviction.
     ///
+    /// C8: insertions into an epoch bucket that already holds [`EPOCH_BUCKET_CAP`] entries are
+    /// REFUSED (returns false, nothing evicted) — a single-epoch flood cannot push legitimate
+    /// hashes of other epochs out of the global FIFO.
+    ///
     /// Then, if the set is already at `cap`, the single oldest entry is evicted (FIFO).
     pub fn check_and_insert_epoch(&mut self, hash: [u8; 16], epoch: u32) -> bool {
         // Purge entries older than epoch-2 (time-decaying eviction).
@@ -108,6 +75,7 @@ impl Dedup {
                 Some(&oldest_epoch) if oldest_epoch != 0 && epoch.saturating_sub(oldest_epoch) > 2 => {
                     self.order.pop_front();
                     self.seen.remove(&oldest_hash);
+                    self.decrement_bucket(oldest_epoch);
                 }
                 _ => break,
             }
@@ -118,16 +86,38 @@ impl Dedup {
             return false;
         }
 
+        // C8: per-epoch sub-cap — refuse without evicting other epochs' entries.
+        if epoch != 0 && self.epoch_counts.get(&epoch).copied().unwrap_or(0) >= EPOCH_BUCKET_CAP {
+            return false;
+        }
+
         // Cap-based eviction (FIFO).
         if self.order.len() >= self.cap
             && let Some(oldest) = self.order.pop_front()
         {
-            self.seen.remove(&oldest);
+            if let Some(oldest_epoch) = self.seen.remove(&oldest) {
+                self.decrement_bucket(oldest_epoch);
+            }
         }
 
         self.seen.insert(hash, epoch);
         self.order.push_back(hash);
+        if epoch != 0 {
+            *self.epoch_counts.entry(epoch).or_insert(0) += 1;
+        }
         true
+    }
+
+    fn decrement_bucket(&mut self, epoch: u32) {
+        if epoch == 0 {
+            return;
+        }
+        if let Some(c) = self.epoch_counts.get_mut(&epoch) {
+            *c = c.saturating_sub(1);
+            if *c == 0 {
+                self.epoch_counts.remove(&epoch);
+            }
+        }
     }
 }
 
@@ -147,7 +137,9 @@ const WITNESS_PREFIX_END: usize = 102;
 /// - All types: CLOBBER incoming TTL at byte 214 to max(DEFAULT_TTL_REGIONAL) (TTL cap, C1).
 /// - `RegionalPropagated`: relay if ttl > 0 (decrement byte 214).
 /// - `Private`: relay only if `vdl::verify` passes AND ttl > 0 (decrement byte 214).
-/// - `LocalImmediate`: never relayed.
+/// - `LocalImmediate`: relay exactly once — any incoming ttl > 0 is CLOBBERED to 0, never
+///   decremented, so an adversary advertising ttl=255 still gets exactly one hop. The echo
+///   is the originator's receipt (send-and-listen); display stays PoCP-gated upstream.
 pub fn relay_decision_with_difficulty(
     buf: &[u8; FRAME_LEN],
     difficulty_bits: u8,
@@ -183,7 +175,17 @@ pub fn relay_decision_with_difficulty(
             out[214] = raw_ttl - 1;
             Some(out)
         }
-        MsgType::LocalImmediate => None,
+        MsgType::LocalImmediate => {
+            // C1+: any incoming ttl > 0 relays exactly once, with TTL clobbered to 0.
+            // Not decremented: an adversary setting ttl=255 gets the same single hop as
+            // an honest ttl=1. TTL=0 on the wire → no further relay, hard bound.
+            if buf[214] == 0 {
+                return None;
+            }
+            let mut out = *buf;
+            out[214] = 0;
+            Some(out)
+        }
     }
 }
 
@@ -197,136 +199,13 @@ pub fn relay_decision_with_difficulty(
 /// Decodes `buf` via the codec (returns `None` on any decode error).  Then:
     /// - `RegionalPropagated`: relay if ttl > 0 (decrement byte 214).
 /// - `Private`: relay only if VDL witness passes at `vdl::VDL_DIFFICULTY_BITS` and ttl > 0.
-/// - `LocalImmediate`: never relayed.
+/// - `LocalImmediate`: relay once with TTL clobbered to 0 (reflection receipt; anti-flood).
 ///
 /// # Caller contract
 /// Invoke this only for frames that have already passed dedup (`Dedup::check_and_insert`
 /// returned `true`).  Rebroadcast the returned buffer verbatim.
 pub fn relay_decision(buf: &[u8; FRAME_LEN]) -> Option<[u8; FRAME_LEN]> {
     relay_decision_with_difficulty(buf, vdl::VDL_DIFFICULTY_BITS)
-}
-
-/// **DEAD CODE — DO NOT USE.** The live ingest pipeline is `MeshService.ingestFrame` in Kotlin.
-/// This `Engine` was the intended Rust-side ingestion path but is not wired into the running
-/// node. The Rust test suite still exercises `on_recv`; production paths MUST go through
-/// Kotlin.  If the two pipelines diverge further, delete this and move its tests.
-///
-/// Constructed by the platform shim (cap = dedup capacity, e.g. 4096). Driven by
-/// radio callbacks + a timer tick.
-///
-/// # v0 note: epoch validation
-/// The engine does NOT yet validate that the frame's epoch is within [N, N-1] of the
-/// local clock epoch — that check is delegated to the shim (`now_ms` is accepted but
-/// unused). Future versions will own the epoch clock.
-#[allow(dead_code)]
-pub struct Engine {
-    dedup: Dedup,
-}
-
-#[allow(dead_code)]
-impl Engine {
-    /// Create a new `Engine` with a dedup set of the given `cap`acity (minimum 1).
-    pub fn new(cap: usize) -> Self {
-        Engine {
-            dedup: Dedup::new(cap),
-        }
-    }
-
-    /// Ingest one raw received frame: parse -> verify -> decide (order fixed above).
-    ///
-    /// Processing order (invariant #2):
-    ///   1. Decode — structural check (length, version, message type).
-    ///   2. Dedup — time-decaying epoch-aware duplicate suppression.
-    ///   3. Sig verify — Ed25519 against the embedded ephemeral pubkey.
-    ///   4. PoCP witness check (v0: Tier 1/2 only, skipped if `local_sketch` is `None`) —
-    ///      verifies the sender knew the claimed cell sketch AND the sketch overlaps
-    ///      the local observation (`jaccard >= tau`). CellMismatch → `Alarm`, Stale → `Drop`.
-    ///   5. Relay decision — TTL cap/decrement, VDL witness check for Private.
-    ///
-    /// Returns:
-    /// - [`Ingest::Relay`] if the frame should be forwarded (TTL > 0, sig + witness OK).
-    /// - [`Ingest::Deliver`] for `LocalImmediate` frames (display only, never relayed).
-    /// - [`Ingest::Drop`] with a [`Reason`] explaining the rejection.
-    /// - [`Ingest::Alarm`] if a security event (e.g. CellMismatch) is detected.
-    ///
-    /// The shim is responsible for independently extracting body text for UI display
-    /// after this call.
-    pub fn on_recv(
-        &mut self,
-        raw: &[u8; FRAME_LEN],
-        _rssi: i8,
-        _now_ms: u64,
-        local_sketch: Option<&CellSketch>,
-        tau: f32,
-    ) -> Ingest {
-        // 1. Decode — structural check.
-        let frame = match codec::decode(raw) {
-            Ok(f) => f,
-            Err(_) => return Ingest::Drop(Reason::Decode),
-        };
-
-        // 2. Dedup — time-decaying epoch-aware suppression.
-        let hash = message::frame_hash(raw);
-        if !self.dedup.check_and_insert_epoch(hash, frame.epoch) {
-            return Ingest::Drop(Reason::Seen);
-        }
-
-        // 3. Sig verify — Ed25519 against the embedded ephemeral pubkey.
-        if !crypto::verify(&frame.pk, codec::signing_region(raw), &frame.sig) {
-            return Ingest::Drop(Reason::BadSig);
-        }
-
-        // 4. PoCP witness check — for Tier 1/2, verify sender proximity.
-        //    Private frames skip this (they use VDL cost gate + AEAD instead).
-        if (frame.msg_type == MsgType::LocalImmediate
-            || frame.msg_type == MsgType::RegionalPropagated)
-            && let Some(local) = local_sketch
-        {
-                match pocp::verify_witness_local(
-                    local,
-                    &frame.div_sketch,
-                    frame.epoch,
-                    &raw[..WITNESS_PREFIX_END],
-                    &frame.pocp_wit,
-                    tau,
-                ) {
-                    pocp::WitVerdict::Valid => { /* proceed to step 5 */ }
-                    pocp::WitVerdict::CellMismatch => {
-                        return Ingest::Alarm(SecurityEvent::CellMismatch);
-                    }
-                    pocp::WitVerdict::Stale => {
-                        return Ingest::Drop(Reason::BadWitness);
-                }
-            }
-        }
-
-        // 5. Relay decision — TTL cap/decrement + VDL witness for Private.
-        match frame.msg_type {
-            MsgType::LocalImmediate => {
-                // Display only, never relayed.
-                Ingest::Deliver(Alert {
-                    id: frame.mark,
-                    body: frame.body,
-                })
-            }
-            MsgType::RegionalPropagated | MsgType::Private => {
-                match relay_decision(raw) {
-                    Some(relayed) => Ingest::Relay(relayed),
-                    None => Ingest::Drop(Reason::BadWitness),
-                }
-            }
-        }
-    }
-
-    /// Originate a local message on the given tier; returns the frame to advertise.
-    pub fn on_originate(&mut self, _tier: Tier, _body: [u8; 64]) -> [u8; FRAME_LEN] {
-        todo!("M4")
-    }
-
-    /// Fire any due (unsuppressed) rebroadcasts.
-    pub fn tick(&mut self, _now_ms: u64) -> Vec<[u8; FRAME_LEN]> {
-        todo!("M4: Trickle")
-    }
 }
 
 #[cfg(test)]
@@ -422,17 +301,57 @@ mod tests {
     }
 
     #[test]
-    fn relay_decision_local_immediate_returns_none() {
+    fn relay_decision_local_ttl_zero_returns_none() {
         let seed = test_seed();
         let bs = test_beacon_seed();
-        // LocalImmediate with any TTL must never be relayed.
+        // LocalImmediate with TTL 0 is end-of-line: not relayed.
         let buf =
-            message::make_message_frame_ttl(&seed, 1, &bs, MsgType::LocalImmediate, "local", 8)
+            message::make_message_frame_ttl(&seed, 1, &bs, MsgType::LocalImmediate, "local", 0)
                 .expect("short text");
         assert!(
             relay_decision(&buf).is_none(),
-            "LocalImmediate must never be relayed"
+            "LocalImmediate with TTL 0 must not be relayed"
         );
+    }
+
+    #[test]
+    fn relay_decision_local_relays_once_with_ttl_clobbered_to_zero() {
+        let seed = test_seed();
+        let bs = test_beacon_seed();
+        // Honest local frame (ttl=1): relayed exactly once, as ttl=0.
+        let buf = message::make_message_frame(&seed, 1, &bs, MsgType::LocalImmediate, "local")
+            .expect("short text");
+        assert_eq!(buf[214], 1, "fresh local frame must originate at ttl=1");
+        let relayed = relay_decision(&buf).expect("local frame must be relayed once");
+        assert_eq!(relayed[214], 0, "relayed local TTL must be clobbered to 0");
+        // All other bytes must be identical.
+        for i in 0..FRAME_LEN {
+            if i != 214 {
+                assert_eq!(relayed[i], buf[i], "byte {i} must be unchanged after relay");
+            }
+        }
+        // The ttl=0 echo is never relayed again.
+        assert!(
+            relay_decision(&relayed).is_none(),
+            "relayed local echo (ttl=0) must not be relayed"
+        );
+    }
+
+    #[test]
+    fn relay_decision_local_adversary_high_ttl_clobbered_to_zero() {
+        let seed = test_seed();
+        let bs = test_beacon_seed();
+        // Adversary originates a local frame with an inflated TTL: the relay clobbers it
+        // to 0 — the flood budget is one hop regardless.
+        let buf =
+            message::make_message_frame_ttl(&seed, 1, &bs, MsgType::LocalImmediate, "local", 255)
+                .expect("short text");
+        let relayed = relay_decision(&buf).expect("ttl>0 relays once");
+        assert_eq!(
+            relayed[214], 0,
+            "adversarial ttl=255 must be clobbered to 0, not decremented"
+        );
+        assert!(relay_decision(&relayed).is_none());
     }
 
     #[test]

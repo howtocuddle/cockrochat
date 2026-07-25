@@ -711,11 +711,17 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_mesh_core_checksum_func_observe_marks(
     ): Int
+    external fun uniffi_mesh_core_checksum_func_open_private_body_only(
+    ): Int
     external fun uniffi_mesh_core_checksum_func_open_private_frame(
     ): Int
     external fun uniffi_mesh_core_checksum_func_pair_derive(
     ): Int
     external fun uniffi_mesh_core_checksum_func_pair_public(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_pair_ratchet(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_pair_seed_v2(
     ): Int
     external fun uniffi_mesh_core_checksum_func_panic_wipe(
     ): Int
@@ -726,6 +732,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_mesh_core_checksum_func_pocp_witness(
     ): Int
     external fun uniffi_mesh_core_checksum_func_relay_frame(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_vdl_check_frame(
     ): Int
     external fun uniffi_mesh_core_checksum_func_vdl_difficulty_bits(
     ): Int
@@ -742,6 +750,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_mesh_core_checksum_method_beaconffi_is_low_entropy(
     ): Int
     external fun uniffi_mesh_core_checksum_method_beaconffi_seed(
+    ): Int
+    external fun uniffi_mesh_core_checksum_method_beaconffi_wipe(
     ): Int
     external fun uniffi_mesh_core_checksum_method_ffidedup_check_and_insert(
     ): Int
@@ -791,6 +801,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_mesh_core_fn_method_beaconffi_seed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_method_beaconffi_wipe(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_mesh_core_fn_clone_ffidedup(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_mesh_core_fn_free_ffidedup(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -841,7 +853,7 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_make_message_frame_ttl(`seed`: RustBuffer.ByValue,`epoch`: Int,`beaconSeed`: RustBuffer.ByValue,`localImmediate`: Byte,`text`: RustBuffer.ByValue,`ttl`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_mesh_core_fn_func_make_message_frame_with_witness(`seed`: RustBuffer.ByValue,`epoch`: Int,`beaconSeed`: RustBuffer.ByValue,`localImmediate`: Byte,`text`: RustBuffer.ByValue,`ttl`: Byte,`divSketch`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_mesh_core_fn_func_make_message_frame_with_witness(`seed`: RustBuffer.ByValue,`epoch`: Int,`beaconSeed`: RustBuffer.ByValue,`localImmediate`: Byte,`text`: RustBuffer.ByValue,`ttl`: Byte,`divSketch`: RustBuffer.ByValue,`witEpoch`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_make_private_frame(`seed`: RustBuffer.ByValue,`epoch`: Int,`beaconSeed`: RustBuffer.ByValue,`pairKey`: RustBuffer.ByValue,`text`: RustBuffer.ByValue,`counter`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -849,11 +861,17 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_observe_marks(`marksFlat`: RustBuffer.ByValue,`rssi`: RustBuffer.ByValue,`seed`: Int,`rssiFloorDbm`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_open_private_body_only(`frame`: RustBuffer.ByValue,`pairKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_open_private_frame(`frame`: RustBuffer.ByValue,`pairKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_pair_derive(`ourSk`: RustBuffer.ByValue,`theirPk`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_pair_public(`sk`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_pair_ratchet(`key`: RustBuffer.ByValue,`fromEpoch`: Int,`toEpoch`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_pair_seed_v2(`shared`: RustBuffer.ByValue,`saltA`: RustBuffer.ByValue,`saltB`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_panic_wipe(uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -865,6 +883,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_relay_frame(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_vdl_check_frame(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
     external fun uniffi_mesh_core_fn_func_vdl_difficulty_bits(uniffi_out_err: UniffiRustCallStatus, 
     ): Int
     external fun uniffi_mesh_core_fn_func_verify_frame(`bytes`: RustBuffer.ByValue,`pubkey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1035,7 +1055,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_mesh_core_checksum_func_make_message_frame_ttl() != 146) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_mesh_core_checksum_func_make_message_frame_with_witness() != 35626) {
+    if (lib.uniffi_mesh_core_checksum_func_make_message_frame_with_witness() != 16746) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_func_make_private_frame() != 259) {
@@ -1047,13 +1067,22 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_mesh_core_checksum_func_observe_marks() != 28327) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_mesh_core_checksum_func_open_private_body_only() != 57774) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_mesh_core_checksum_func_open_private_frame() != 3238) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_mesh_core_checksum_func_pair_derive() != 6957) {
+    if (lib.uniffi_mesh_core_checksum_func_pair_derive() != 26118) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_func_pair_public() != 45935) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_pair_ratchet() != 27105) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_pair_seed_v2() != 28039) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_func_panic_wipe() != 21039) {
@@ -1069,6 +1098,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_func_relay_frame() != 31977) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_func_vdl_check_frame() != 19982) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_func_vdl_difficulty_bits() != 32947) {
@@ -1093,6 +1125,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_method_beaconffi_seed() != 6804) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_method_beaconffi_wipe() != 7198) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_method_ffidedup_check_and_insert() != 18470) {
@@ -1625,6 +1660,14 @@ public interface BeaconFfiInterface {
      */
     fun `seed`(): kotlin.ByteArray
     
+    /**
+     * Zero the live beacon seed and reset the chain (C7 panic-wipe gap). Previously only a
+     * flag was set — the current seed stayed in Rust memory, recoverable until process exit.
+     * After this call the object is sterile: `seed()` returns zeros and further `advance`
+     * calls build a chain unrelated to anything broadcast before the wipe.
+     */
+    fun `wipe`()
+    
     companion object
 }
 
@@ -1839,6 +1882,24 @@ open class BeaconFfi: Disposable, AutoCloseable, BeaconFfiInterface
     }
     )
     }
+    
+
+    
+    /**
+     * Zero the live beacon seed and reset the chain (C7 panic-wipe gap). Previously only a
+     * flag was set — the current seed stayed in Rust memory, recoverable until process exit.
+     * After this call the object is sterile: `seed()` returns zeros and further `advance`
+     * calls build a chain unrelated to anything broadcast before the wipe.
+     */override fun `wipe`()
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_method_beaconffi_wipe(
+        it,
+        _status)
+}
+    }
+    
     
 
     
@@ -3049,9 +3110,13 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
          * `pocp_sketch_to_div_sketch`) and computes a PoCP witness so the frame proves the
          * sender was physically present in the cell.
          *
+         * `epoch` is the frame epoch (freshness); `wit_epoch` is the epoch the SKETCH was built
+         * from and seeds the witness MAC — pass `epoch - 1` when signing the previous epoch's
+         * completed sketch at epoch rollover (A1/C2 bootstrap). Receivers accept both.
+         *
          * Returns `None` if `seed` is not 32 bytes, `div_sketch` is not 16 bytes, or `text`
          * exceeds 63 UTF-8 bytes. Private frames must use `make_private_frame` instead.
-         */ fun `makeMessageFrameWithWitness`(`seed`: kotlin.ByteArray, `epoch`: kotlin.UInt, `beaconSeed`: kotlin.ByteArray, `localImmediate`: kotlin.Boolean, `text`: kotlin.String, `ttl`: kotlin.UByte, `divSketch`: kotlin.ByteArray): kotlin.ByteArray? {
+         */ fun `makeMessageFrameWithWitness`(`seed`: kotlin.ByteArray, `epoch`: kotlin.UInt, `beaconSeed`: kotlin.ByteArray, `localImmediate`: kotlin.Boolean, `text`: kotlin.String, `ttl`: kotlin.UByte, `divSketch`: kotlin.ByteArray, `witEpoch`: kotlin.UInt): kotlin.ByteArray? {
             return FfiConverterOptionalByteArray.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_mesh_core_fn_func_make_message_frame_with_witness(
@@ -3063,7 +3128,8 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
         FfiConverterBoolean.lower(`localImmediate`),
         FfiConverterString.lower(`text`),
         FfiConverterUByte.lower(`ttl`),
-        FfiConverterByteArray.lower(`divSketch`),_status)
+        FfiConverterByteArray.lower(`divSketch`),
+        FfiConverterUInt.lower(`witEpoch`),_status)
 }
     )
     }
@@ -3143,6 +3209,24 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
     
 
         /**
+         * Trial-decrypt a private frame body against one pair key WITHOUT re-verifying the
+         * signature or VDL witness (B5). CALLER CONTRACT: the frame already passed
+         * `frame_verify_self` AND `vdl_check_frame` exactly once upstream. Returns the plaintext,
+         * or `None` on wrong key, wrong type, or malformed body — indistinguishable by design.
+         */ fun `openPrivateBodyOnly`(`frame`: kotlin.ByteArray, `pairKey`: kotlin.ByteArray): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_open_private_body_only(
+    
+        
+        FfiConverterByteArray.lower(`frame`),
+        FfiConverterByteArray.lower(`pairKey`),_status)
+}
+    )
+    }
+    
+
+        /**
          * Decrypt and verify a private frame using the 32-byte pairwise key. Returns the plaintext, or
          * `None` if `frame` is not 226 bytes, `pair_key` is not 32 bytes, the frame is not a private
          * message type, the VDL witness fails, or the key is wrong.
@@ -3163,6 +3247,9 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
          * Derive the 32-byte pairwise message key from our secret key and their public key. Returns
          * `None` if either input is not exactly 32 bytes or if the contributory check fails (all-zero
          * output, i.e. the peer supplied a low-order point).
+         *
+         * NOTE (A3): keys derived here are STATIC (no forward secrecy). New pairings must go through
+         * `pair_seed_v2` + `pair_ratchet`.
          */ fun `pairDerive`(`ourSk`: kotlin.ByteArray, `theirPk`: kotlin.ByteArray): kotlin.ByteArray? {
             return FfiConverterOptionalByteArray.lift(
     uniffiRustCall() { _status ->
@@ -3186,6 +3273,43 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
     
         
         FfiConverterByteArray.lower(`sk`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Advance a pair-chain key from `from_epoch` to `to_epoch`, one one-way BLAKE3 step per
+         * epoch (A3 forward secrecy — past keys unrecoverable). Returns `None` on wrong key length,
+         * `to_epoch < from_epoch`, or a span over 8192 steps (DoS bound on wire-controlled epochs).
+         */ fun `pairRatchet`(`key`: kotlin.ByteArray, `fromEpoch`: kotlin.UInt, `toEpoch`: kotlin.UInt): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_pair_ratchet(
+    
+        
+        FfiConverterByteArray.lower(`key`),
+        FfiConverterUInt.lower(`fromEpoch`),
+        FfiConverterUInt.lower(`toEpoch`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * v2 pairing chain seed (A3 forward secrecy). `shared` is the `pair_derive` output;
+         * `salt_a`/`salt_b` are the two sides' per-pairing salts (order-independent — the core
+         * sorts them). Both sides delete their salts after pairing; the chain seed is then
+         * unrecoverable from the seized long-term secret alone. Returns `None` on wrong lengths.
+         */ fun `pairSeedV2`(`shared`: kotlin.ByteArray, `saltA`: kotlin.ByteArray, `saltB`: kotlin.ByteArray): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_pair_seed_v2(
+    
+        
+        FfiConverterByteArray.lower(`shared`),
+        FfiConverterByteArray.lower(`saltA`),
+        FfiConverterByteArray.lower(`saltB`),_status)
 }
     )
     }
@@ -3283,6 +3407,23 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
             return FfiConverterOptionalByteArray.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_mesh_core_fn_func_relay_frame(
+    
+        
+        FfiConverterByteArray.lower(`bytes`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Verify ONLY the VDL proof-of-work witness of a private frame (B5). True iff the frame
+         * decodes, is `MsgType::Private`, and the witness meets the production difficulty.
+         * The shim calls this ONCE per received private frame before the per-contact trial-decrypt
+         * loop, instead of paying for it inside every `open_private_frame` attempt.
+         */ fun `vdlCheckFrame`(`bytes`: kotlin.ByteArray): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_vdl_check_frame(
     
         
         FfiConverterByteArray.lower(`bytes`),_status)

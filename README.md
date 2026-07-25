@@ -5,7 +5,7 @@
 [![Rust Core](https://img.shields.io/badge/Core-Rust-b7410e?style=flat-square&logo=rust)](mesh-core/)
 [![Android](https://img.shields.io/badge/Platform-Android%20(Kotlin)-3DDC84?style=flat-square&logo=android)](android/)
 [![BLE 5.0](https://img.shields.io/badge/Transport-BLE%205.0%20Extended-0082FC?style=flat-square&logo=bluetooth)]()
-[![License](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue?style=flat-square)]()
+[![License](https://img.shields.io/badge/License-AGPL--3.0-orange?style=flat-square)](mesh-core/Cargo.toml)
 
 *Phones relay emergency alerts directly to each other using Bluetooth Low Energy — no cell towers, Wi-Fi routers, central servers, internet access, or user accounts required.*
 
@@ -19,8 +19,8 @@ During protests, civil demonstrations, or natural disasters, cellular networks a
 
 ### Key Highlights
 - **100% Offline & Serverless**: Works entirely over Bluetooth Low Energy (BLE 5.0).
-- **Anti-Fake Alert Protection & Spatial Diversity**: Uses physical presence checks ("Proof-of-Co-Presence") and multi-cell spatial diversity so remote actors outside the crowd cannot inject false alerts or fake consensus.
-- **Self-Destructing Identity**: Keys auto-rotate continuously. If a phone is seized, past messages and location history remain unrecoverable.
+- **Anti-Fake Alert Protection**: Tier-1 local alerts require a Proof-of-Co-Presence witness; witnessless public frames are relay-only and never displayed. Broadcast corroboration counts only claims heard directly over the air — and is shown as a hint, never as a guarantee (a determined *nearby* attacker can forge claims; see §Tier 2 below).
+- **Self-Destructing Identity**: Marks and signing keys rotate every epoch over a one-way beacon chain. v2 private pairings ratchet message keys every epoch from a seed mixed with deleted pairing salts — a seized phone exposes at most the current and previous epoch of private history.
 - **Crash-Proof Rust Core**: Every packet is parsed and verified in memory-safe Rust before forwarding, preventing crash-attacks (zip bombs).
 - **Danger-Only Alerts**: The public mesh strictly carries danger signals (e.g. teargas, police kettling, medical emergency). Silence is never assumed to mean safety.
 
@@ -31,51 +31,8 @@ During protests, civil demonstrations, or natural disasters, cellular networks a
 | Component | Platform | Details |
 |:---|:---|:---|
 | **`mesh-core`** | Rust (Core Library) | Contains all protocol parsing, security, cryptography, and relay state machine. |
-| **`android`** | Kotlin (Android App) | Single-activity Jetpack Compose app with AMOLED industrial UI, BLE 5.0 Foreground Service, and left settings drawer. |
-| **`laptop`** | Rust (Linux Desktop) | Native Linux testing client built on BlueZ for desktop debugging & fixed relay nodes. |
-
-### Android UI (v0.5-unified)
-
-The Android app is a single unified Jetpack Compose activity combining a full-screen messaging interface with a slide-out control panel.
-
-<div align="center">
-<table>
-<tr>
-<td align="center"><strong>Chat — messaging interface</strong></td>
-<td align="center"><strong>Drawer — control panel</strong></td>
-</tr>
-<tr>
-<td><img src="docs/screenshot-chat.jpg" width="300" alt="Chat interface with tier-colored bubbles, trust meters, and segmented tier selector" /></td>
-<td><img src="docs/screenshot-drawer.jpg" width="300" alt="Left drawer with guide, detector, settings, diagnostics, and panic wipe" /></td>
-</tr>
-</table>
-</div>
-
-#### Design: AMOLED Industrial
-
-- **True Black Canvas** — `#000000` background with near-black panels (`#0A0A0C`), designed for AMOLED power savings and protest low-visibility use.
-- **Monospace Typography** — all text uses monospaced fonts with wide letter-spacing for a tactical, industrial aesthetic.
-- **Tier-Colored Accents** — the only saturated colors are the three tier accents: teal (`LOCAL`), blue (`BROADCAST`), purple (`PRIVATE`), plus red for panic.
-
-#### Chat Interface
-
-- **Tier-Colored Chat Bubbles** — messages rendered in a `LazyColumn` with rounded surfaces. Own messages use semi-transparent tier-colored backgrounds with matching borders; received messages use dark panel backgrounds with hairline borders.
-- **Trust Meter** — each received message shows a 3-bar signal meter indicating delivery path: `▮▮▮ DIRECT` (sender physically near) or `▮▮ RELAYED` (carried by mesh hops), plus proof type (`VERIFIED`, `CORROBORATED`, or `E2E`).
-- **Segmented Tier Selector** — bottom composer includes a color-coded segmented control for switching between `LOCAL`, `BROADCAST`, and `PRIVATE` tiers, with a live byte counter.
-- **QR Pairing Dialog** — in-app QR code generation and scanning (via ZXing) for out-of-band X25519 key exchange. No internet or account required.
-
-#### Left Drawer (☰ → Control Panel)
-
-- **GUIDE** — explains when to use each tier, with expandable cards showing use-case, reach, and trust level. Includes a trust meter legend.
-- **DETECTOR** — live proximity readout showing how many devices' frames arrive direct (no relay hop), with signal strength bars and epoch stats.
-- **SETTINGS** — every tunable parameter: epoch length, beacon floor, τ threshold, RSSI floor, coded PHY, low-latency scan, message repeat epochs.
-- **DIAGNOSTICS** — merged rig toolset: export/clear debug log, export measurement JSON, copy/compare KMV sketches (Jaccard distance).
-- **PANIC** — hold-to-wipe button that erases all pairing keys, contacts, config, and logs. Irreversible.
-
-#### Security
-
-- **Screenshot Protection** — `FLAG_SECURE` prevents screenshots and screen recording (state-actor threat model).
-- **AMOLED Black Status/Nav Bars** — system bars blacked out to match the UI and reduce visual signature.
+| **`android`** | Kotlin (Android App) | Foreground Service handling BLE 5.0 Extended Advertising and UI rendering. |
+| **`laptop`** | Rust (Linux Desktop, deprecated) | Phone-to-phone only; laptop client is no longer maintained. |
 
 ---
 
@@ -96,7 +53,7 @@ The protocol uses a 3-tier messaging model to balance latency, crowd coverage, a
   Tier 2: Multi-Hop Regional Mesh Flood
   [ Sender ] ---> [ Relay Node 1 ] ---> [ Relay Node 2 ] ---> [ Crowd Mesh ]
    * Multi-hop flood re-broadcasted through the crowd.
-   * Density-adaptive Trickle algorithm, Frame Hash dedup & TTL limits.
+   * Prioritized relay queue, epoch-bucketed frame-hash dedup & TTL limits.
 
   Tier 3: Encrypted Direct Private Message
   [ Sender ] ================================================> [ Recipient ]
@@ -108,39 +65,43 @@ The protocol uses a 3-tier messaging model to balance latency, crowd coverage, a
 
 ### Tier Summary
 
-1. **Tier 1 — Immediate Local Alerts (~30m)**: Instant alerts broadcasted to people right next to you.
-2. **Tier 2 — Crowd-Relayed Regional Alerts**: Multi-hop alerts propagated through the mesh. Confidence scales through **Spatial Diversity** (corroboration across distinct physical crowd cells). Re-broadcast frequency automatically adjusts to crowd density via Trickle.
-3. **Tier 3 — Encrypted Direct Messages**: Pairwise private messages between trusted contacts with built-in spam protection (Proof-of-Work).
+1. **Tier 1 — Immediate Local Alerts (~30m)**: Instant alerts broadcasted to people right next to you. Display requires a valid Proof-of-Co-Presence witness; the sender repeats until it hears its own echo, then re-airs sparsely for up to 30 minutes.
+2. **Tier 2 — Crowd-Relayed Regional Alerts**: Multi-hop alerts propagated through the mesh. Displayed frames carry a valid witness; the badge shows how many *distinct, directly overheard* devices vouched for the same alert body — a hint, not a guarantee.
+3. **Tier 3 — Encrypted Direct Messages**: Pairwise private messages between trusted contacts with built-in spam protection (Proof-of-Work) and epoch-ratcheted forward-secret keys (v2 pairing).
 
 ### Real-World Crowd Propagation Examples
 
 #### **Tier 1 Example: Immediate Local Alert (1-Hop / Direct RF Range)**
 * **Scenario**: A user at the **North Gate** sees teargas deployed nearby and sends an immediate local alert *"TEAR GAS AT NORTH GATE"*.
 * **Flow**:
-  1. The frame is generated with `TTL = 0` and `MsgType::LocalImmediate`.
+  1. The frame is generated with `TTL = 1` and `MsgType::LocalImmediate`, carrying a PoCP witness bound to the sender's cell sketch (at epoch rollover, the previous epoch's completed sketch is signed and accepted).
   2. Broadcasted directly via BLE Extended Advertising to all devices within **10–30 meters** (1-hop direct radio range).
-  3. **Display**: Displays **instantly** on screens of nearby devices in direct range.
-  4. **Propagation**: **Never relayed** by receiving nodes (`relay_decision` returns `None`).
-  5. **Beacon Entropy**: Nearby devices collect the frame's sender mark as a physical co-presence witness (`localImmediateMarks`) to generate beacon entropy for key rotation.
+  3. **Display**: Displays on nearby devices **only if the PoCP witness verifies** against the receiver's own cell sketch. Frames with no witness are **relay-only — never displayed** (a remote injector cannot pass the co-presence gate without hearing the cell's marks).
+  4. **Propagation**: Relayed **exactly once** — any receiving node relays it with TTL clobbered to 0, so the hop bound holds even against an adversary advertising `ttl=255`.
+  5. **Receipt**: When the originator hears its own relayed echo, it knows at least one peer carried it (an echo is *not* proof of delivery — a single relay can forge it). The sender then re-airs the alert sparsely (every 4th epoch) until a 30-minute cap, instead of screaming every epoch forever.
+  6. **Beacon Entropy**: Nearby devices collect the frame's sender mark as a physical co-presence witness (`localImmediateMarks`) to generate beacon entropy for key rotation.
 
 #### **Tier 2 Example: Crowd-Relayed Regional Mesh Broadcast (Multi-Hop / Spatial Diversity)**
 * **Scenario**: A user at the **North Gate** broadcasts a regional warning *"POLICE KETTLING NORTH EXIT"*.
 * **Flow**:
-  1. **Origination**: The packet is sent with `TTL = 8` (`MsgType::RegionalPropagated`) carrying the sender's local cell sketch (**Locale A** / North Gate).
-  2. **Relaying Without Display**: Nearby phones in Locale A receive the packet. Because the packet has only been seen in 1 locale (`distinct = 1`), phones **do not display it yet** to prevent single-source panic stampedes. Instead, they immediately **relay the packet** over BLE (`relayOnly = true`).
-  3. **Mesh Hopping**: The packet hops phone-to-phone across the crowd (taking milliseconds per hop). When it travels 60 meters to the **Central Stage** (**Locale B**), receiving nodes compare the North Gate sketch (**Locale A**) with their own ambient Bluetooth environment (**Locale B**).
-  4. **Spatial Diversity Corroboration**: Because Locale A and Locale B have distinct surrounding Bluetooth signals (`Jaccard < τ`), `trust.recordVerification` returns **`distinct = 2`**.
-  5. **Display Unlock**: The moment `distinct >= 2`, the anti-panic lock releases, and the alert **instantly pops up on screens across the Central Stage, North Gate, and the rest of the crowd mesh**!
-  6. **Loop Suppression**: Originators stop re-broadcasting once they hear their own reflection (`ownFrameHash`), and relay nodes suppress duplicates using a bounded time-decaying deduplication filter (`FfiDedup`).
+  1. **Origination**: The packet is sent with `TTL = 8` (`MsgType::RegionalPropagated`) carrying the sender's local cell sketch and a signed PoCP witness.
+  2. **Display Gate — valid witness required**: Before any device shows the alert, it checks that the witness MAC (sender's cell sketch vs receiver's observed marks) passes — **any Jaccard outcome** qualifies; a failed MAC check means the frame is relay-only, never displayed. This prevents remote injectors who aren't in the crowd from making their frame pop up on any phone.
+  3. **Corroboration as hint, not lock**: Each receiving node that already holds the same body text from another overheard direct transmission increments a local counter. The UI displays this count on the badge: *"3 nearby devices just sent the same alert"*. This is **not** a verified count — a single nearby attacker can fabricate multiple claims — but in practice, a high count across different physical locations increases confidence. The corroboration score is scoped to the device's own radio observations; it does not aggregate across the mesh.
+  4. **Mesh Hopping**: The packet hops phone-to-phone across the crowd, each relay decrementing TTL and pushing it onto the GATT plane too (`relayOnce` on both advertisement and GATT). Relay nodes use a priority queue (LOCAL echo > regional > private), draining only when `radio.capacityAvailable()`.
+  5. **TTL clobbering**: Unlike the old design where TTL was trusted from the wire, every hop now clobbers TTL to `min(ttl, originator_ttl - hop_count)` so an adversary cannot inflate range by setting `ttl=255`.
+  6. **Loop Suppression**: Originators stop re-broadcasting once they hear their own reflection (`ownFrameHash`), and relay nodes suppress duplicates using a per-epoch bounded dedup bucket (capped at 1024 entries, 0-indexed by frame-hash byte mod 1024).
 
 #### **Tier 3 Example: Encrypted Direct Private Chat (End-to-End AEAD / Oblivious Mesh)**
 * **Scenario**: Alice wants to send a private message to Bob *"Meet at South Entrance in 10 mins"* in a dense crowd.
 * **Flow**:
-  1. **Proof-of-Work & Encryption**: Alice's phone computes a VDL proof-of-work witness (~seconds of CPU) to rate-limit spam and encrypts the 47-byte body using ChaCha20-Poly1305 under their shared pairing key (`pairKey`).
-  2. **No Recipient Address on Wire**: The frame contains no recipient address, phone number, or user ID.
-  3. **Oblivious Multi-Hop Relay**: Intermediary nodes in the crowd verify the Ed25519 signature and VDL PoW witness. They **cannot read the message or know who it is for**, but they decrement TTL by 1 and relay it across the mesh (`advertiseRelayOnce`).
-  4. **Constant-Time Trial Decryption**: As Bob's phone (and all receiving phones) receives the frame, it trial-decrypts the body against all paired contact keys in sequence without breaking early (preventing timing side-channel attacks).
-  5. **Delivery**: Bob's phone successfully authenticates the Poly1305 tag and displays `🔒 Alice: Meet at South Entrance in 10 mins`.
+  1. **v2 Out-of-Band Pairing**: Before any private messages can be exchanged, Alice and Bob pair by scanning each other's QR codes. Each QR carries a public key **plus a 32-byte random salt**. The shared chain seed is `BLAKE3(X25519_DH(alice_sk, bob_pk) ‖ sort(alice_salt, bob_salt))`. Both salts exist only in memory and are deleted immediately after pairing — a seized phone cannot recompute the seed without the salts (`pairSeedV2`).
+  2. **Epoch Ratchet**: Starting from the chain seed, message keys advance as `key_e = BLAKE3(key_{e-1} ‖ epoch)`. At any point, the phone stores the current key and the previous key (to handle reordered delivery). A seized phone exposes at most the current and previous epoch's messages (`pairRatchet`).
+  3. **Proof-of-Work & Encryption**: Alice's phone computes a VDL proof-of-work witness once per frame (`vdlCheckFrame`) — not once per contact — to rate-limit spam. She encrypts the body using ChaCha20-Poly1305 under the current epoch's message key for Bob.
+  4. **Private Counter**: Each outgoing private frame carries an epoch-scoped per-contact counter. The counter's base is randomly chosen at the start of each epoch and stored in EncryptedSharedPreferences — the old plaintext `PRIVATE_COUNTER_KEY` has been removed.
+  5. **No Recipient Address on Wire**: The frame contains no recipient address, phone number, or user ID.
+  6. **Oblivious Multi-Hop Relay**: Intermediary nodes in the crowd verify the Ed25519 signature and VDL PoW witness once (`vdlCheckFrame`). They **cannot read the message or know who it is for**, but they decrement TTL by 1 and relay it across the mesh (`advertiseRelayOnce` + GATT `relayOnce`).
+  7. **Constant-Time Trial Decryption**: Bob's phone (and all receiving phones) runs `vdlCheckFrame` once, then fetches its `candidateKeys` from the encrypted contact store (avoiding Keystore burn per contact). It trial-decrypts the body against those keys in sequence without breaking early (preventing timing side-channel attacks via `openPrivateBodyOnly`).
+  8. **Delivery**: Bob's phone successfully authenticates the Poly1305 tag and displays `🔒 Alice: Meet at South Entrance in 10 mins`.
 
 ---
 
@@ -148,17 +109,17 @@ The protocol uses a 3-tier messaging model to balance latency, crowd coverage, a
 
 | Module | Description | Status | Tests |
 |:---|:---|:---:|:---:|
-| **`codec`** | Zero-allocation fixed 226-byte packet encoder/decoder | Implemented | 9 |
-| **`crypto`** | Ephemeral Ed25519 signing, BLAKE3 KDF, X25519 DH, ChaCha20 AEAD | Implemented | 8 |
-| **`message`** | Public danger alert & private message frame generator | Implemented | 19 |
-| **`pocp`** | Physical proximity verification (Proof-of-Co-Presence) | Implemented | 18 |
+| **`codec`** | Zero-allocation fixed 226-byte packet encoder/decoder (reserved-tail check) | Implemented | 11 |
+| **`crypto`** | Ed25519 signing, BLAKE3 KDF, X25519 DH, ChaCha20 AEAD, forward-secure v2 ratchet | Implemented | 10 |
+| **`message`** | Public danger alert & private message frame generator (wit_epoch param) | Implemented | 20 |
+| **`pocp`** | Physical proximity verification (Proof-of-Co-Presence) | Implemented | 23 |
 | **`beacon`** | Self-clocking key rotation & forward secrecy beacon | Implemented | 13 |
-| **`private`** | Tier-3 encrypted direct messaging with epoch nonces | Implemented | 6 |
-| **`vdl`** | Proof-of-work cost gate for spam protection | Implemented | 5 |
-| **`statemachine`** | Packet processing, relay decisions, and deduplication | Implemented | 12 |
-| **`trust`** | Multi-cell crowd corroboration aggregator | In Progress (M6) | 5 |
+| **`private`** | Tier-3 encrypted direct messaging with per-epoch random counter base | Implemented | 6 |
+| **`vdl`** | Proof-of-work cost gate for spam protection (vdlCheckFrame) | Implemented | 5 |
+| **`statemachine`** | Packet processing, relay decisions, per-epoch dedup bucket (1024-cap) | Implemented | 13 |
+| **`trust`** | Multi-cell crowd corroboration aggregator (direct-heard only) | Implemented | 5 |
 | **`store`** | Memory-bounded message buffer & instant panic wipe | Implemented | — |
-| **`ffi`** | Language bindings for Android (Kotlin) & iOS (Swift) | Implemented | 9 |
+| **`ffi`** | Language bindings for Android (Kotlin) — 7 new exports (pairSeedV2, pairRatchet, vdlCheckFrame, openPrivateBodyOnly, makeMessageFrameWithWitness wit_epoch, BeaconFfi.wipe) | Implemented | 14 |
 
 ---
 
@@ -184,9 +145,9 @@ cargo test
 # Build release binary
 cargo build --release
 
-# Run Linux laptop node (requires BlueZ & Bluetooth 5 hardware)
+# Run Linux laptop node (requires BlueZ, Bluetooth 5 hardware, and root/CAP_NET_ADMIN privileges)
 cd ../laptop
-cargo run
+sudo cargo run
 ```
 
 ---
@@ -211,7 +172,7 @@ This glossary explains technical terms and protocol concepts used throughout `co
 - **BLE 5.0 Extended Advertising**: A Bluetooth Low Energy standard allowing devices to broadcast larger packets (up to 255 bytes) without requiring Bluetooth pairing.
 - **Epoch**: A fixed time window (e.g., 10 seconds in testing, minutes in production) during which devices sample background signals and rotate internal keys.
 - **Frame Hash (Dedup Key)**: A unique 16-byte identifier computed from a message's contents, allowing relay nodes to ignore duplicate broadcasts.
-- **Jaccard Distance ($\tau$)**: A mathematical formula measuring set similarity. In `cockroachat`, it determines whether two devices share the same physical radio environment.
+- **Jaccard Similarity ($\tau$)**: A mathematical formula measuring set similarity. In `cockroachat`, it determines whether two devices share the same physical radio environment.
 - **KMV Sketch (K-Minimum Values)**: A compact summary of ambient Bluetooth signals, allowing devices to compare physical surroundings efficiently in memory.
 - **LE Coded PHY**: A Bluetooth 5 mode using error correction (S=8) to quadruple radio range, ideal for dense or obstructed crowd environments.
 - **Parse-Before-Forward**: The security rule requiring every packet to be fully validated in Rust before being displayed or relayed.

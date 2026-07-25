@@ -107,6 +107,13 @@ class Measurement {
     fun exportJson(cfg: MeshConfig): String {
         val root = JSONObject()
 
+        // D6: mark sightings are RF-proximity evidence — say so inside the file itself.
+        root.put(
+            "warning",
+            "CONTAINS RF-PROXIMITY DATA: mark sightings reveal which devices were " +
+                "physically near this phone and when. Handle like location history."
+        )
+
         val cfgObj = JSONObject()
         cfgObj.put("epochMs", cfg.epochMs)
         cfgObj.put("tauThreshold", cfg.tauThreshold)

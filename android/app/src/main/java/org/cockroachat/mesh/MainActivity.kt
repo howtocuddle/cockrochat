@@ -29,12 +29,13 @@ class MainActivity : ComponentActivity() {
 
     private val scanQrLauncher =
         registerForActivityResult(ScanContract()) { result ->
-            val payload = result.contents ?: return@registerForActivityResult
-            val key = PairStore.publicKeyFromQrOrHex(payload)
-            if (key == null) {
+            // A3: pass the RAW payload through — the v2 salt inside it is required for the
+            // forward-secret chain seed; stripping it would silently degrade to a static key.
+            val payload = result.contents?.trim() ?: return@registerForActivityResult
+            if (PairStore.parsePairingOffer(payload) == null) {
                 toast("That QR is not a Cockroachat pairing key")
             } else {
-                pendingQrCallback?.invoke(key)
+                pendingQrCallback?.invoke(payload)
                 toast("Pairing key scanned")
             }
         }
@@ -71,9 +72,11 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun applyConfig(cfg: MeshConfig) {
-            ConfigStore.save(this@MainActivity, cfg)
-            MeshState.config = cfg
-            toast("Config applied")
+            val clean = cfg.sanitized() // C1: clamp footguns before they reach the engine
+            ConfigStore.save(this@MainActivity, clean)
+            MeshState.config = clean
+            if (clean != cfg) toast("Config applied (values clamped to safe ranges)")
+            else toast("Config applied")
         }
 
         override fun exportLog() {
@@ -85,6 +88,8 @@ class MainActivity : ComponentActivity() {
         override fun clearLog() { MeshState.debugLog.value = emptyList() }
 
         override fun exportMeasurements() {
+            // D6: this file reveals who was physically near this device and when.
+            toast("Export contains RF-proximity data — share carefully")
             share(MeshState.measurement.exportJson(MeshState.config), "mesh_measurements.json", "application/json")
         }
 
@@ -133,7 +138,9 @@ class MainActivity : ComponentActivity() {
             if (text.toByteArray(Charsets.UTF_8).size > 47) return "Too long (max 47 UTF-8 bytes)"
             if (!MeshState.running.value) return "Turn the radio on first"
             MeshState.receipt.value = null
-            MeshState.outgoingPrivate.value = PrivateSend(contact.pairKey, text, contact.label)
+            // C4: queue (no key material in the queue — the service ratchets at seal time).
+            val result = MeshState.privateSends.trySend(PrivateSend(contact.label, text))
+            if (result.isFailure) return "Send queue full — wait for the current private send"
             MeshState.appendMessage(
                 MsgRow(
                     tsMs = System.currentTimeMillis(),
@@ -157,7 +164,7 @@ class MainActivity : ComponentActivity() {
                 MeshState.contactsVersion.value += 1
                 toast("Paired with ${label.trim()}")
             } else {
-                toast("Bad name or key")
+                toast("Bad name or key (pairing with your own key is not allowed)")
             }
             return ok
         }
@@ -169,6 +176,7 @@ class MainActivity : ComponentActivity() {
 
         override fun myPublicHex(): String = PairStore.myPublicHex(this@MainActivity)
         override fun myQrPayload(): String = PairStore.qrPayload(this@MainActivity)
+        override fun mySaltHex(): String = PairStore.mySaltHex(this@MainActivity)
 
         override fun launchQrScanner(onKey: (String) -> Unit) {
             pendingQrCallback = onKey
@@ -202,6 +210,9 @@ class MainActivity : ComponentActivity() {
         window.navigationBarColor = android.graphics.Color.BLACK
 
         MeshState.config = ConfigStore.load(this)
+        // D4: say it in the UI when the TEE-backed store is unavailable (pairings would
+        // silently die with the process otherwise).
+        MeshState.secureStorageOk.value = PairStore.secureStorageAvailable(this)
 
         setContent {
             MeshTheme {

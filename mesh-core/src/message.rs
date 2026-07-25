@@ -10,10 +10,19 @@ use crate::vdl;
 
 // Wire offset where the witness field begins; VDL prefix is buf[0..WITNESS_PREFIX_END].
 // Matches codec layout: body ends at 102, pocp_wit occupies 102..118.
-const WITNESS_PREFIX_END: usize = 102;
+pub(crate) const WITNESS_PREFIX_END: usize = 102;
 
 /// Default TTL for `RegionalPropagated` messages (hop budget before the frame is silently dropped).
 pub const DEFAULT_TTL_REGIONAL: u8 = 8;
+
+/// Default TTL for `LocalImmediate` messages.
+///
+/// Not 0: a local frame must be relayable exactly once so the originator can hear its
+/// own reflection — that echo is the receipt ("send-and-listen"). Relays CLOBBER any
+/// incoming TTL to 0 (see `statemachine::relay_decision`), so the hop bound holds even
+/// against an adversary advertising ttl=255. Display stays PoCP-gated in the ingest
+/// pipeline, so the frame is only ever shown inside the originator's cell.
+pub const DEFAULT_TTL_LOCAL: u8 = 1;
 
 /// Device-unique, beacon-rotating mark.
 ///
@@ -103,7 +112,7 @@ pub fn make_message_frame_ttl(
 /// Build a signed message frame from a 32-byte `seed`.
 ///
 /// Delegates to [`make_message_frame_ttl`] with TTL chosen by type:
-/// - `LocalImmediate` → ttl 0 (single-hop, never relayed)
+/// - `LocalImmediate` → [`DEFAULT_TTL_LOCAL`] (one relay hop, for reflection receipts)
 /// - `RegionalPropagated` → [`DEFAULT_TTL_REGIONAL`]
 ///
 /// Body layout: `body[0] = len`, `body[1..1+len]` = UTF-8 text, rest zero.
@@ -120,7 +129,7 @@ pub fn make_message_frame(
         return None;
     }
     let ttl = match msg_type {
-        MsgType::LocalImmediate => 0,
+        MsgType::LocalImmediate => DEFAULT_TTL_LOCAL,
         MsgType::RegionalPropagated => DEFAULT_TTL_REGIONAL,
         _ => return None,
     };
@@ -137,9 +146,13 @@ pub fn make_message_frame(
 ///   4. Encode final frame.
 ///
 /// `div_sketch` is 16 bytes from `pocp::sketch_to_div_sketch` (low-byte truncation of the
-/// local KMV sketch). `epoch` is both the frame epoch and the witness seed index.
+/// local KMV sketch). `epoch` is the frame epoch (freshness); `wit_epoch` is the epoch the
+/// SKETCH was built from and seeds the witness MAC. They differ at epoch rollover (A1/C2):
+/// at the start of an epoch a device may have heard nothing yet, so it signs the PREVIOUS
+/// epoch's completed sketch with `wit_epoch = epoch - 1`; receivers accept both.
 ///
 /// Private frames are rejected — use `make_private_frame` instead.
+#[allow(clippy::too_many_arguments)]
 pub fn make_message_frame_with_witness(
     seed: &[u8; 32],
     epoch: u32,
@@ -148,6 +161,7 @@ pub fn make_message_frame_with_witness(
     text: &str,
     ttl: u8,
     div_sketch: [u8; 16],
+    wit_epoch: u32,
 ) -> Option<[u8; FRAME_LEN]> {
     use crate::pocp;
 
@@ -189,8 +203,10 @@ pub fn make_message_frame_with_witness(
     };
 
     // Step 2: encode, compute witness over bytes 0..102 (everything before pocp_wit).
+    // The witness MAC is seeded by the SKETCH's epoch (wit_epoch), not necessarily the
+    // frame epoch — see the function doc (A1/C2 epoch-rollover bootstrap).
     let unsigned = codec::encode(&f);
-    let wit = pocp::witness(&div_sketch, epoch, &unsigned[..WITNESS_PREFIX_END]);
+    let wit = pocp::witness(&div_sketch, wit_epoch, &unsigned[..WITNESS_PREFIX_END]);
     f.pocp_wit = wit;
 
     // Step 3: re-encode (witness now present), then sign SIG_REGION.
@@ -294,6 +310,21 @@ pub fn open_private_frame(
         return None;
     }
     if !vdl::verify(&arr[..WITNESS_PREFIX_END], &f.pocp_wit, difficulty_bits) {
+        return None;
+    }
+    private::open_private_body(pair_key, f.epoch, &f.pk, &f.div_sketch, &f.body)
+}
+
+/// Open a private frame's body WITHOUT re-verifying the signature or VDL witness (B5).
+///
+/// Caller contract (invariant #2 preserved): the caller has already verified this frame's
+/// Ed25519 signature AND its VDL witness exactly once upstream. This exists for the
+/// per-contact trial-decrypt loop: a storm of VDL-valid private frames must cost one AEAD
+/// attempt per stored contact, not N × (sig verify + VDL verify + AEAD) per frame.
+pub fn open_private_body_only(buf: &[u8], pair_key: &[u8; 32]) -> Option<String> {
+    let arr: &[u8; FRAME_LEN] = buf.try_into().ok()?;
+    let f = codec::decode(arr).ok()?;
+    if f.msg_type != MsgType::Private {
         return None;
     }
     private::open_private_body(pair_key, f.epoch, &f.pk, &f.div_sketch, &f.body)
@@ -531,12 +562,15 @@ mod tests {
     }
 
     #[test]
-    fn make_message_frame_defaults_local_immediate_ttl_0() {
+    fn make_message_frame_defaults_local_immediate_ttl_local() {
         let seed = test_seed();
         let bs = test_beacon_seed();
         let buf = make_message_frame(&seed, 4, &bs, MsgType::LocalImmediate, "local")
             .expect("short text");
-        assert_eq!(buf[214], 0, "LocalImmediate must have TTL 0 at byte 214");
+        assert_eq!(
+            buf[214], DEFAULT_TTL_LOCAL,
+            "LocalImmediate must have DEFAULT_TTL_LOCAL at byte 214"
+        );
     }
 
     #[test]
@@ -549,6 +583,34 @@ mod tests {
             buf[214], DEFAULT_TTL_REGIONAL,
             "RegionalPropagated must have DEFAULT_TTL_REGIONAL at byte 214"
         );
+    }
+
+    #[test]
+    fn witness_frame_prev_epoch_seed_roundtrip() {
+        // A1/C2 epoch-rollover bootstrap: a frame for epoch N carrying the sketch built
+        // from epoch N-1's marks must verify with witness seed N-1 (and not N).
+        let seed = test_seed();
+        let bs = test_beacon_seed();
+        let div = [0x42u8; 16];
+        let buf = make_message_frame_with_witness(
+            &seed,
+            100,
+            &bs,
+            MsgType::LocalImmediate,
+            "rollover",
+            DEFAULT_TTL_LOCAL,
+            div,
+            99,
+        )
+        .expect("frame");
+        let f = decode(&buf).expect("decodes");
+        assert_eq!(f.epoch, 100, "frame epoch stays at wall-clock epoch");
+        assert!(crate::pocp::verify_witness(&div, 99, &buf[..102], &f.pocp_wit));
+        assert!(!crate::pocp::verify_witness(&div, 100, &buf[..102], &f.pocp_wit));
+        // Signature over the witnessed encoding must still verify.
+        let e = crypto::from_seed(&seed, &bs);
+        let pk = crypto::public_key(&e);
+        assert!(crypto::verify(&pk, codec::signing_region(&buf), &f.sig));
     }
 
     // ----- private frame tests -----

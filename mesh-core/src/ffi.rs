@@ -99,9 +99,14 @@ pub fn make_message_frame_ttl(
 /// `pocp_sketch_to_div_sketch`) and computes a PoCP witness so the frame proves the
 /// sender was physically present in the cell.
 ///
+/// `epoch` is the frame epoch (freshness); `wit_epoch` is the epoch the SKETCH was built
+/// from and seeds the witness MAC — pass `epoch - 1` when signing the previous epoch's
+/// completed sketch at epoch rollover (A1/C2 bootstrap). Receivers accept both.
+///
 /// Returns `None` if `seed` is not 32 bytes, `div_sketch` is not 16 bytes, or `text`
 /// exceeds 63 UTF-8 bytes. Private frames must use `make_private_frame` instead.
 #[uniffi::export]
+#[allow(clippy::too_many_arguments)]
 pub fn make_message_frame_with_witness(
     seed: Vec<u8>,
     epoch: u32,
@@ -110,6 +115,7 @@ pub fn make_message_frame_with_witness(
     text: String,
     ttl: u8,
     div_sketch: Vec<u8>,
+    wit_epoch: u32,
 ) -> Option<Vec<u8>> {
     let seed: &[u8; 32] = seed.as_slice().try_into().ok()?;
     let bs: &[u8; 32] = beacon_seed.as_slice().try_into().ok()?;
@@ -119,7 +125,7 @@ pub fn make_message_frame_with_witness(
     } else {
         MsgType::RegionalPropagated
     };
-    Some(message::make_message_frame_with_witness(seed, epoch, bs, msg_type, &text, ttl, div)?.to_vec())
+    Some(message::make_message_frame_with_witness(seed, epoch, bs, msg_type, &text, ttl, div, wit_epoch)?.to_vec())
 }
 
 /// Relay a received frame: decrement the TTL at byte 214 and return the modified buffer, or
@@ -142,14 +148,21 @@ pub fn frame_ttl(bytes: Vec<u8>) -> Option<u8> {
 
 /// The TTL a RegionalPropagated or Private frame carries AT ORIGINATION.
 ///
-/// Presence / direct-RF detection: relays always decrement, so a received frame of
-/// msg_type 2 or 3 whose TTL still equals this value came straight from the originator
-/// (direct RF), while any lower TTL arrived via the relay path. LocalImmediate frames
-/// (TTL 0) are never relayed and are always direct. Kept in Rust so the shim never
-/// hardcodes protocol constants (invariant #1).
+/// Presence / direct-RF detection: relays always decrement (regional/private) or clobber
+/// to 0 (local), so a received frame whose TTL still equals its type's origination TTL
+/// came straight from the originator (direct RF), while any lower TTL arrived via the
+/// relay path. Kept in Rust so the shim never hardcodes protocol constants (invariant #1).
 #[uniffi::export]
 pub fn default_ttl_regional() -> u32 {
     message::DEFAULT_TTL_REGIONAL as u32
+}
+
+/// Origination TTL for LocalImmediate frames — see [`default_ttl_regional`] for why the
+/// shim must read this from the core. Local frames originate at this TTL and relays
+/// clobber to 0, so `ttl == default_ttl_local` ⇔ direct RF from the originator.
+#[uniffi::export]
+pub fn default_ttl_local() -> u32 {
+    message::DEFAULT_TTL_LOCAL as u32
 }
 
 /// Decode `bytes` then extract the body text. Returns `None` on any failure.
@@ -479,11 +492,35 @@ pub fn pair_public(sk: Vec<u8>) -> Option<Vec<u8>> {
 /// Derive the 32-byte pairwise message key from our secret key and their public key. Returns
 /// `None` if either input is not exactly 32 bytes or if the contributory check fails (all-zero
 /// output, i.e. the peer supplied a low-order point).
+///
+/// NOTE (A3): keys derived here are STATIC (no forward secrecy). New pairings must go through
+/// `pair_seed_v2` + `pair_ratchet`.
 #[uniffi::export]
 pub fn pair_derive(our_sk: Vec<u8>, their_pk: Vec<u8>) -> Option<Vec<u8>> {
     let our_sk: &[u8; 32] = our_sk.as_slice().try_into().ok()?;
     let their_pk: &[u8; 32] = their_pk.as_slice().try_into().ok()?;
     Some(crypto::pair_derive(our_sk, their_pk)?.to_vec())
+}
+
+/// v2 pairing chain seed (A3 forward secrecy). `shared` is the `pair_derive` output;
+/// `salt_a`/`salt_b` are the two sides' per-pairing salts (order-independent — the core
+/// sorts them). Both sides delete their salts after pairing; the chain seed is then
+/// unrecoverable from the seized long-term secret alone. Returns `None` on wrong lengths.
+#[uniffi::export]
+pub fn pair_seed_v2(shared: Vec<u8>, salt_a: Vec<u8>, salt_b: Vec<u8>) -> Option<Vec<u8>> {
+    let shared: &[u8; 32] = shared.as_slice().try_into().ok()?;
+    let salt_a: &[u8; 32] = salt_a.as_slice().try_into().ok()?;
+    let salt_b: &[u8; 32] = salt_b.as_slice().try_into().ok()?;
+    Some(crypto::pair_seed_v2(shared, salt_a, salt_b).to_vec())
+}
+
+/// Advance a pair-chain key from `from_epoch` to `to_epoch`, one one-way BLAKE3 step per
+/// epoch (A3 forward secrecy — past keys unrecoverable). Returns `None` on wrong key length,
+/// `to_epoch < from_epoch`, or a span over 8192 steps (DoS bound on wire-controlled epochs).
+#[uniffi::export]
+pub fn pair_ratchet(key: Vec<u8>, from_epoch: u32, to_epoch: u32) -> Option<Vec<u8>> {
+    let key: &[u8; 32] = key.as_slice().try_into().ok()?;
+    Some(crypto::pair_ratchet(key, from_epoch, to_epoch)?.to_vec())
 }
 
 /// Build an encrypted private frame. `seed` is 32 bytes; `pair_key` is the 32-byte pairwise key
@@ -524,6 +561,36 @@ pub fn make_private_frame(
 pub fn open_private_frame(frame: Vec<u8>, pair_key: Vec<u8>) -> Option<String> {
     let pair_key: &[u8; 32] = pair_key.as_slice().try_into().ok()?;
     message::open_private_frame(&frame, pair_key, vdl::VDL_DIFFICULTY_BITS)
+}
+
+/// Verify ONLY the VDL proof-of-work witness of a private frame (B5). True iff the frame
+/// decodes, is `MsgType::Private`, and the witness meets the production difficulty.
+/// The shim calls this ONCE per received private frame before the per-contact trial-decrypt
+/// loop, instead of paying for it inside every `open_private_frame` attempt.
+#[uniffi::export]
+pub fn vdl_check_frame(bytes: Vec<u8>) -> bool {
+    let buf: [u8; FRAME_LEN] = match bytes.as_slice().try_into() {
+        Ok(b) => b,
+        Err(_) => return false,
+    };
+    let f = match codec::decode(&buf) {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
+    if f.msg_type != MsgType::Private {
+        return false;
+    }
+    vdl::verify(&buf[..102], &f.pocp_wit, vdl::VDL_DIFFICULTY_BITS)
+}
+
+/// Trial-decrypt a private frame body against one pair key WITHOUT re-verifying the
+/// signature or VDL witness (B5). CALLER CONTRACT: the frame already passed
+/// `frame_verify_self` AND `vdl_check_frame` exactly once upstream. Returns the plaintext,
+/// or `None` on wrong key, wrong type, or malformed body — indistinguishable by design.
+#[uniffi::export]
+pub fn open_private_body_only(frame: Vec<u8>, pair_key: Vec<u8>) -> Option<String> {
+    let pair_key: &[u8; 32] = pair_key.as_slice().try_into().ok()?;
+    message::open_private_body_only(&frame, pair_key)
 }
 
 /// The VDL difficulty in bits used for private frames. Exposed for display in the debug UI.
@@ -607,6 +674,18 @@ impl BeaconFfi {
     /// Current beacon epoch number. Not used for frame epoch (wall clock handles that).
     pub fn epoch(&self) -> u32 {
         self.inner.lock().expect("mutex not poisoned").epoch
+    }
+
+    /// Zero the live beacon seed and reset the chain (C7 panic-wipe gap). Previously only a
+    /// flag was set — the current seed stayed in Rust memory, recoverable until process exit.
+    /// After this call the object is sterile: `seed()` returns zeros and further `advance`
+    /// calls build a chain unrelated to anything broadcast before the wipe.
+    pub fn wipe(&self) {
+        let mut inner = self.inner.lock().expect("mutex not poisoned");
+        inner.seed = [0u8; 32];
+        inner.epoch = 0;
+        inner.last_advance_ms = 0;
+        inner.low_entropy = true;
     }
 }
 

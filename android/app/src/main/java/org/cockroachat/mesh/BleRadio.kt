@@ -395,21 +395,32 @@ class BleRadio(private val ctx: Context) {
         }
     }
 
+    /** B8: true while a hardware relay slot is free. The service's relay queue drains only
+     *  when this holds — frames WAIT for a slot instead of being silently dropped. */
+    fun relayCapacityAvailable(): Boolean = activeRelaySets < 2
+
+    /**
+     * One-shot relay advertisement. [codedPhy] (C6): honor the configured PHY so relayed
+     * frames reach the same long-range frontier as originations — previously relays were
+     * hardcoded to 1M and died at the edge of coded-PHY range.
+     */
     @SuppressLint("MissingPermission")
-    fun advertiseRelayOnce(frame: ByteArray, durationMs: Long) {
+    fun advertiseRelayOnce(frame: ByteArray, durationMs: Long, codedPhy: Boolean = false) {
         if (activeRelaySets >= 2) {
             onDebug?.invoke("relay skipped: 2 relay sets already active")
             return
         }
         try {
             val advertiser = adapter?.bluetoothLeAdvertiser ?: return
+            val useCoded = codedPhy && codedPhySupported()
+            val phy = if (useCoded) BluetoothDevice.PHY_LE_CODED else BluetoothDevice.PHY_LE_1M
             val params = AdvertisingSetParameters.Builder()
                 .setLegacyMode(false)
                 .setConnectable(false)
                 .setScannable(false)
                 .setInterval(AdvertisingSetParameters.INTERVAL_LOW)
-                .setPrimaryPhy(BluetoothDevice.PHY_LE_1M)
-                .setSecondaryPhy(BluetoothDevice.PHY_LE_1M)
+                .setPrimaryPhy(phy)
+                .setSecondaryPhy(phy)
                 .setTxPowerLevel(AdvertisingSetParameters.TX_POWER_MEDIUM)
                 .build()
             val data = AdvertiseData.Builder()

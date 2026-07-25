@@ -110,30 +110,32 @@ private fun GuideSection() {
         GuideCard(
             tier = SendTier.LOCAL,
             useWhen = "People physically around you: same street, same crowd, same building.",
-            reach = "Radio range only (~10–30 m). Repeats until a nearby peer echoes it back — that echo is your delivery receipt.",
-            trust = "HIGH. The sender's radio is provably near yours (co-presence proof)."
+            reach = "Radio range only (~10–30 m). Repeats until a peer echoes it back, then sparsely for up to 30 min. An echo is a hint, not a delivery guarantee.",
+            trust = "HIGH. The sender proved co-presence with your radio cell (PoCP). Witnessless frames are relay-only and never shown."
         )
         GuideCard(
             tier = SendTier.BROADCAST,
             useWhen = "Reaching people beyond radio range; announcements to the whole area.",
-            reach = "Carried by the mesh up to 8 hops. Displayed only after 2+ nearby cells corroborate the origin.",
-            trust = "MEDIUM-HIGH. Content is verified and corroborated, but the sender can be many hops away."
+            reach = "Carried by the mesh up to 8 hops. Shows with a corroboration counter: distinct claims heard DIRECTLY from nearby devices.",
+            trust = "MEDIUM. Signed + witness-bound, but the counter is a HINT, not a proof — a determined nearby attacker can forge claims. The sender can be many hops away."
         )
         GuideCard(
             tier = SendTier.PRIVATE,
-            useWhen = "Content meant for one person only. Pair out-of-band first (QR / key exchange).",
+            useWhen = "Content meant for one person only. Pair out-of-band first (QR + salt).",
             reach = "Whole mesh, like broadcast — but only the paired contact can read it.",
-            trust = "HIGH content. Only the contact can read or write it. Note: relays can see that a private frame passed, not what it says."
+            trust = "HIGH content. Only the contact can read or write it. v2 pairings ratchet keys every epoch: a seized phone exposes at most the current and previous epoch. Relays see that a private frame passed, not what it says."
         )
 
         HorizontalDivider(color = Hairline)
         Text("TRUST METER — HOW A MESSAGE ARRIVED", style = monoMicro(TextBright))
-        LegendRow(3, TierLocal, "DIRECT", "Straight off the sender's radio — they are physically near you.")
+        LegendRow(3, TierLocal, "DIRECT", "Arrived at origination TTL — straight off the sender's radio, physically near you.")
         LegendRow(2, TrustAmber, "RELAYED", "Carried through mesh hops. Content still verified; sender may be far.")
         LegendRow(3, TierPrivate, "E2E", "End-to-end encrypted: only the paired contact could produce it.")
         Text(
-            "Every displayed frame already passed proof-of-work and the co-presence gate. " +
-                "The meter tells you the delivery path, not whether it was checked.",
+            "Every displayed frame passed a signature check. LOCAL also proved co-presence " +
+                "(PoCP). BROADCAST carries a bound witness — its claim counter covers only " +
+                "devices heard directly and is a hint, never a guarantee. PRIVATE is " +
+                "end-to-end encrypted and proof-of-work gated.",
             style = monoMicro(), lineHeight = 15.sp
         )
     }
@@ -241,6 +243,10 @@ private fun SettingsSection(controller: UiController) {
     var error by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // C1: out-of-range values are clamped to safe ranges on apply (τ=0 would match
+        // everything; minHearers=0 makes the beacon constant-entropy; mismatched epochMs
+        // silently partitions the mesh).
+        Text("EXPERT — values are clamped to safe ranges on apply", style = monoMicro(TrustAmber))
         ParamField("EPOCH LENGTH (MS)", epochMs) { epochMs = it }
         ParamField("BEACON FLOOR (MS)", beaconFloorMs) { beaconFloorMs = it }
         ParamField("MIN HEARERS (BEACON ENTROPY)", minHearers) { minHearers = it }

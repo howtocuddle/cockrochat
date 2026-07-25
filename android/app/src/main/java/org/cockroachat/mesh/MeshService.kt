@@ -31,11 +31,12 @@ import uniffi.mesh_core.frameWitnessParts
 import uniffi.mesh_core.makeMessageFrame
 import uniffi.mesh_core.makeMessageFrameWithWitness
 import uniffi.mesh_core.makePrivateFrame
-import uniffi.mesh_core.openPrivateFrame
+import uniffi.mesh_core.openPrivateBodyOnly
 import uniffi.mesh_core.panicWipe
 import uniffi.mesh_core.pocpSketchToDivSketch
 import uniffi.mesh_core.pocpVerifyWitnessLocal
 import uniffi.mesh_core.relayFrame
+import uniffi.mesh_core.vdlCheckFrame
 import uniffi.mesh_core.wasPanicWiped
 import java.security.SecureRandom
 
@@ -49,10 +50,22 @@ class MeshService : LifecycleService() {
         /** Start the service with this action to trigger an immediate panic wipe. */
         const val ACTION_PANIC = "org.cockroachat.mesh.ACTION_PANIC"
 
-        // Private-send nonce counter. Own prefs file (NOT PairStore's "mesh_pairing_v2");
-        // performPanicWipe deletes this file explicitly.
+        // Legacy plaintext counter prefs file (B4/C9: counter moved into PairStore's
+        // encrypted store with a per-epoch random base). performPanicWipe still deletes
+        // this file explicitly to erase traces left by older installs.
         const val PAIR_PREFS_NAME = "mesh_pairing"
-        const val PRIVATE_COUNTER_KEY = "privateSendCounter"
+
+        /** B2: hard cap on LOCAL re-broadcast lifetime. An unheard local alert must not
+         *  scream every epoch forever (battery + stale-danger re-airing hours later). */
+        const val LOCAL_REBROADCAST_WINDOW_MS = 30 * 60_000L
+
+        /** B1/B2: after the first reflected echo, LOCAL messages re-air sparsely (every
+         *  Nth epoch) instead of every epoch — a single forged echo can no longer silence
+         *  the alert, but battery use stays bounded until the hard cap. */
+        const val LOCAL_SPARSE_EVERY_N_EPOCHS = 4L
+
+        /** B8: relay queue bound; lowest-priority tasks are evicted when full. */
+        const val RELAY_QUEUE_CAP = 64
 
         /**
          * Trigger a panic wipe from anywhere. Sets the Rust flag (the running service's
@@ -84,11 +97,16 @@ class MeshService : LifecycleService() {
      *  coming back through the mesh (send-and-listen). Cleared after one reaction. */
     private var ownFrameHash: ByteArray? = null
 
-    /** Set when a relayed echo of our frame is heard (receipt). For LOCAL-tier messages
-     *  this is the ONLY stop condition: they re-originate every epoch until received.
+    /** Set when a relayed echo of our frame is heard (receipt). B1: an echo proves only
+     *  that ONE (possibly adversarial) peer relayed us once — LOCAL no longer hard-stops
+     *  on it; it switches to sparse re-airing until [LOCAL_REBROADCAST_WINDOW_MS] passes.
      *  Reset when new outgoing text is composed. */
     @Volatile
     private var reflectionHeard = false
+
+    /** Epoch at which the first echo was heard (LOCAL sparse re-air anchor). */
+    @Volatile
+    private var echoEpoch: UInt? = null
 
     /** LocalImmediate marks heard this epoch (for beacon entropy collection).
      *  Guarded by [marksLock]: ingest runs on BLE binder threads, the epoch loop on main. */
@@ -108,8 +126,17 @@ class MeshService : LifecycleService() {
     // Track whether the first frame of the current epoch has been logged.
     private var firstFrameEpoch: UInt? = null
 
-    // Repeated-text suppression: maps text -> ownEpoch when last seen (display-only).
-    // Guarded by itself: ingestFrame runs concurrently on BLE binder threads.
+    // B8: prioritized relay queue. Priority: LOCAL echo (0) > regional (1) > private (2);
+    // FIFO within a class. Drained by a service coroutine whenever the radio has a free
+    // hardware slot — frames WAIT instead of being silently dropped (B8 starvation fix).
+    private data class RelayTask(val frame: ByteArray, val priority: Int, val seq: Long)
+    private val relayQueueLock = Any()
+    private val relayQueue = ArrayDeque<RelayTask>()
+    private var relaySeq = 0L
+
+    // Repeated-text suppression (display-only). B6: keyed by (text, sender-mark prefix) —
+    // an attacker pre-broadcasting the same words can no longer suppress the REAL alert
+    // from a different sender. Guarded by itself: ingestFrame runs concurrently.
     private val recentTexts = HashMap<String, UInt>()
 
     // K9: guard against duplicate onStartCommand initialization (MainActivity + ChatActivity
@@ -191,6 +218,7 @@ class MeshService : LifecycleService() {
                 if (text.isNotEmpty()) {
                     MeshState.outgoingSetAtEpoch = epoch
                     reflectionHeard = false // new message → wait for a fresh receipt
+                    echoEpoch = null
                 } else {
                     MeshState.outgoingSetAtEpoch = null
                 }
@@ -208,29 +236,35 @@ class MeshService : LifecycleService() {
             }
         }
 
-        // Private (Tier-3) send: one-shot. Solving the VDL witness blocks for seconds, so it
-        // runs on the default dispatcher. The sealed frame is advertised for a window; relays
-        // with a valid witness carry it regionally (no per-epoch re-solve).
+        // Private (Tier-3) send queue (C4). Solving the VDL witness blocks for seconds, so it
+        // runs on the default dispatcher; queued sends are processed sequentially. The sealed
+        // frame is advertised for a short window; relays with a valid witness carry it
+        // regionally (no per-epoch re-solve).
         //
-        // Nonce safety: a monotonic counter is loaded, incremented, and persisted before each
-        // private send. The counter goes into div_sketch[0..8] and forms the AEAD nonce suffix
-        // (epoch_be || counter_be), preventing nonce reuse under the same pair key within an epoch.
+        // A3: the pair key is resolved AND epoch-ratcheted here (v2 contacts) — key material
+        // never rides the queue. B4/C9: the nonce counter uses a per-epoch random base from
+        // the encrypted store (cross-epoch unlinkability; no plaintext send-volume leak).
         lifecycleScope.launch {
-            MeshState.outgoingPrivate.collect { ps ->
-                if (ps == null) return@collect
+            for (ps in MeshState.privateSends) {
                 val cfg2 = MeshState.config
-                val prefs = getSharedPreferences(PAIR_PREFS_NAME, Context.MODE_PRIVATE)
-                val counter = (prefs.getLong(PRIVATE_COUNTER_KEY, 0L) + 1L).also {
-                    prefs.edit().putLong(PRIVATE_COUNTER_KEY, it).commit()
+                val epoch = (System.currentTimeMillis() / cfg2.epochMs).toUInt()
+                val pairKey = PairStore.keyForSend(this@MeshService, ps.label, epoch)
+                if (pairKey == null) {
+                    MeshState.logDebug("private send dropped: contact '${ps.label}' unknown or key ratchet failed")
+                    continue
                 }
-                MeshState.logDebug("sealing private message (VDL solve, ~seconds of CPU)… counter=$counter")
+                val counter = PairStore.nextPrivateCounter(this@MeshService, epoch)
+                MeshState.logDebug("sealing private message → ${ps.label} (VDL solve, ~seconds of CPU)…")
                 val frame = withContext(Dispatchers.Default) {
-                    val epoch = (System.currentTimeMillis() / cfg2.epochMs).toUInt()
                     val beaconSeed = beacon.seed()
-                    makePrivateFrame(seed, epoch, beaconSeed, ps.pairKey, ps.text, counter.toULong())
+                    makePrivateFrame(seed, epoch, beaconSeed, pairKey, ps.text, counter.toULong())
                 }
                 if (frame != null) {
-                    val windowMs = maxOf(cfg2.messageRepeatEpochs.toLong() * cfg2.epochMs, 6_000L)
+                    // C3: cap the window at 6 s. While the private frame uses the primary
+                    // advertising set our public presence frame is OFF the air — a 30 s
+                    // window made us vanish from neighbors' sketches and cascaded
+                    // CellMismatch drops across the cell.
+                    val windowMs = minOf(cfg2.messageRepeatEpochs.toLong() * cfg2.epochMs, 6_000L)
                     // A phone usually supports one advertising set.  Reuse the primary set for
                     // this window (rather than opening a second one), and push the same frame to
                     // GATT peers so legacy-advertising devices receive private messages too.
@@ -264,7 +298,24 @@ class MeshService : LifecycleService() {
                 } else {
                     MeshState.logDebug("private seal failed (text > 47 bytes or bad key)")
                 }
-                MeshState.outgoingPrivate.value = null
+            }
+        }
+
+        // B7/B8: relay queue drain. Relay tasks wait for a free hardware advertising slot
+        // (previously frames were silently dropped when 2 relay sets were active — in a
+        // busy crowd that starved propagation of real alerts). Every relayed frame also
+        // goes to the GATT plane so legacy phones receive multi-hop traffic too (B7).
+        lifecycleScope.launch {
+            while (isActive) {
+                val task = synchronized(relayQueueLock) {
+                    if (radio.relayCapacityAvailable()) relayQueue.removeFirstOrNull() else null
+                }
+                if (task != null) {
+                    radio.advertiseRelayOnce(task.frame, 2000L, MeshState.config.codedPhy)
+                    gattPlane.relayOnce(task.frame)
+                } else {
+                    delay(250L)
+                }
             }
         }
 
@@ -307,13 +358,21 @@ class MeshService : LifecycleService() {
                     val text = MeshState.outgoingText.value
                     if (text.isNotEmpty()) {
                         if (MeshState.outgoingTier.value == SendTier.LOCAL) {
-                            // Local tier: NO epoch cap. Re-originate every epoch until a
-                            // relayed echo proves an in-cell peer received the message
-                            // (reflection = receipt). The 3-epoch cap stays for Broadcast.
-                            if (reflectionHeard) {
-                                reflectionHeard = false
+                            // B2: LOCAL re-originates every epoch until heard back, but a
+                            // hard 30-minute cap ends it regardless — alone, a phone would
+                            // otherwise scream a stale danger alert every epoch forever.
+                            val setAt = MeshState.outgoingSetAtEpoch
+                            val maxAge = (LOCAL_REBROADCAST_WINDOW_MS / cfg.epochMs).toUInt().coerceAtLeast(1u)
+                            if (setAt != null && epoch >= setAt && epoch - setAt >= maxAge) {
                                 MeshState.outgoingText.value = ""
-                                MeshState.logDebug("local message received (reflection) — stopped re-originating")
+                                MeshState.receipt.value =
+                                    "local broadcast stopped after 30 min — re-send if still relevant"
+                                MeshState.logDebug("local message expired (30 min re-broadcast cap)")
+                            } else if (reflectionHeard && echoEpoch == null) {
+                                // B1: the echo switches us to sparse re-airing; it does NOT
+                                // stop the message (a single forged echo must not silence it).
+                                echoEpoch = epoch
+                                MeshState.logDebug("local echo heard — switching to sparse re-airing")
                             }
                         } else {
                             val setAt = MeshState.outgoingSetAtEpoch
@@ -321,7 +380,7 @@ class MeshService : LifecycleService() {
                                 MeshState.outgoingText.value = ""
                                 if (MeshState.receipt.value == null) {
                                     MeshState.receipt.value =
-                                        "broadcast stopped after ${cfg.messageRepeatEpochs} epochs — no peer confirmation"
+                                        "broadcast stopped after ${cfg.messageRepeatEpochs} epochs — no echo heard"
                                 }
                                 MeshState.logDebug("outgoing message expired after ${cfg.messageRepeatEpochs} epochs")
                             }
@@ -333,7 +392,17 @@ class MeshService : LifecycleService() {
                     // broken on real stacks (field-observed: off-air on Samsung, stale-on-
                     // air on MIUI, success returned both times), while stop+start frames
                     // were demonstrably heard by the peer.
-                    val currentText = MeshState.outgoingText.value
+                    // B1/B2: after the first echo, LOCAL airs the text only every
+                    // LOCAL_SPARSE_EVERY_N_EPOCHS-th epoch (presence frame still rotates).
+                    val rawText = MeshState.outgoingText.value
+                    val sparseEcho = echoEpoch
+                    val currentText = if (
+                        rawText.isNotEmpty() &&
+                        MeshState.outgoingTier.value == SendTier.LOCAL &&
+                        sparseEcho != null &&
+                        epoch >= sparseEcho &&
+                        (epoch - sparseEcho).toLong() % LOCAL_SPARSE_EVERY_N_EPOCHS != 0L
+                    ) "" else rawText
                     rebuildAndAdvertise(epoch, cfg, currentText)
 
                     // Log epoch rollover with neighbor/total counts
@@ -407,6 +476,58 @@ class MeshService : LifecycleService() {
         super.onDestroy()
     }
 
+    /** B8: enqueue a relay task with tier priority, evicting the lowest-priority queued
+     *  task when the queue is full (never the new LOCAL echo). */
+    private fun enqueueRelay(frame: ByteArray, msgType: Int) {
+        val prio = when (msgType) { 1 -> 0; 2 -> 1; else -> 2 }
+        synchronized(relayQueueLock) {
+            if (relayQueue.size >= RELAY_QUEUE_CAP) {
+                val worstIdx = relayQueue.indices.maxByOrNull { relayQueue[it].priority }
+                if (worstIdx != null && relayQueue[worstIdx].priority > prio) {
+                    relayQueue.removeAt(worstIdx)
+                } else {
+                    MeshState.logDebug("relay queue full — dropping relay task (prio $prio)")
+                    return
+                }
+            }
+            relayQueue.addLast(RelayTask(frame, prio, relaySeq++))
+        }
+    }
+
+    /**
+     * A1/C2: PoCP verification accepting the frame's own epoch sketch OR the previous
+     * epoch's completed sketch. Marks rotate every epoch, so a sketch built from epoch N-1
+     * marks only ever matches the verifier's N-1 bucket — at rollover an honest sender
+     * signs that completed sketch with witness seed N-1, and we must try both.
+     *
+     * Returns 0 = Valid, 1 = CellMismatch (witness MAC valid but sketches disjoint —
+     * an honestly remote cell), 2 = Stale (bad MAC / unverifiable).
+     */
+    private fun verifyPocpAcrossRollover(
+        frameEp: UInt,
+        divSketch: ByteArray,
+        prefix: ByteArray,
+        wit: ByteArray,
+        cfg: MeshConfig
+    ): Int {
+        var macValid = false
+        val sketchCur = MeshState.measurement.localSketch(frameEp, seed, cfg.rssiFloorDbm)
+        if (sketchCur.isNotEmpty()) {
+            val v = pocpVerifyWitnessLocal(sketchCur, divSketch, frameEp, prefix, wit, cfg.tauThreshold).toInt()
+            if (v == 0) return 0
+            if (v == 1) macValid = true
+        }
+        if (frameEp > 0u) {
+            val sketchPrev = MeshState.measurement.localSketch(frameEp - 1u, seed, cfg.rssiFloorDbm)
+            if (sketchPrev.isNotEmpty()) {
+                val v = pocpVerifyWitnessLocal(sketchPrev, divSketch, frameEp - 1u, prefix, wit, cfg.tauThreshold).toInt()
+                if (v == 0) return 0
+                if (v == 1) macValid = true
+            }
+        }
+        return if (macValid) 1 else 2
+    }
+
     /**
      * Single ingest path for received frames, shared by the BLE scan callback and GattPlane.
      *
@@ -444,22 +565,27 @@ class MeshService : LifecycleService() {
         val wp = frameWitnessParts(bytes)
 
         // Send-and-listen (spec): a copy of OUR OWN frame coming back over the relay path
-        // means the mesh is carrying it — stop re-originating at the next epoch boundary
-        // instead of repeating blindly. Our hash went into dedup at origination, so this
-        // check must run BEFORE the dedup gate. TTL sits outside the hashed region, so the
-        // relayed echo hashes identically to our original.
+        // means at least one peer relayed it. B1: that echo is NOT a delivery guarantee —
+        // a single adversarial device can forge it by relaying once and blackholing the
+        // rest. LOCAL therefore only drops to sparse re-airing; BROADCAST still stops at
+        // the next epoch boundary (its TTL does the propagating, not our re-origination).
+        // Our hash went into dedup at origination, so this check must run BEFORE the dedup
+        // gate. TTL sits outside the hashed region, so the relayed echo hashes identically.
         val ownHash = ownFrameHash
         if (ownHash != null && hash.contentEquals(ownHash)) {
             ownFrameHash = null // react once per origination
             reflectionHeard = true
             if (MeshState.outgoingText.value.isNotEmpty()) {
-                MeshState.receipt.value = "✓ carried by the mesh — a peer confirmed receipt"
+                MeshState.receipt.value =
+                    "✓ heard back once — a peer relayed it (not proof of delivery)"
             }
-            val repeat = cfg.messageRepeatEpochs.toLong()
-            if (repeat > 0 && MeshState.outgoingText.value.isNotEmpty()) {
-                MeshState.outgoingSetAtEpoch =
-                    (ownEpoch.toLong() + 1L - repeat).coerceAtLeast(0L).toUInt()
-                MeshState.logDebug("reflection heard: mesh is carrying our message; stopping re-origination")
+            if (MeshState.outgoingTier.value != SendTier.LOCAL) {
+                val repeat = cfg.messageRepeatEpochs.toLong()
+                if (repeat > 0 && MeshState.outgoingText.value.isNotEmpty()) {
+                    MeshState.outgoingSetAtEpoch =
+                        (ownEpoch.toLong() + 1L - repeat).coerceAtLeast(0L).toUInt()
+                    MeshState.logDebug("reflection heard: mesh is carrying our broadcast; stopping re-origination")
+                }
             }
         }
 
@@ -501,16 +627,23 @@ class MeshService : LifecycleService() {
         // E3: iterate ALL contacts unconditionally (no early break) — the NUMBER of decrypt
         // calls must not leak which contact index matched (timing side-channel).
         if (wp != null && wp.msgType.toInt() == 3) {
+            if (!vdlCheckFrame(bytes)) return // invalid PoW: drop, do not relay
             var privatePlaintext: String? = null
             var privateLabel: String? = null
             for (contact in PairStore.contacts(this)) {
-                val pt = openPrivateFrame(bytes, contact.pairKey)
-                if (pt != null && privatePlaintext == null) {
-                    privatePlaintext = pt
-                    privateLabel = contact.label
+                // A3: v2 contacts try the epoch-ratcheted key for the frame's epoch
+                // (fast-forwarding when the sender is ahead); v1 uses the static key.
+                for (key in PairStore.candidateKeys(this, contact, frameEp)) {
+                    val pt = openPrivateBodyOnly(bytes, key)
+                    if (pt != null && privatePlaintext == null) {
+                        privatePlaintext = pt
+                        privateLabel = contact.label
+                    }
                 }
             }
             if (privatePlaintext != null) {
+                // A3: persist any fast-forwarded chain state (past keys deleted).
+                PairStore.noteOpened(this, privateLabel!!, frameEp)
                 MeshState.appendMessage(
                     MsgRow(
                         tsMs = System.currentTimeMillis(),
@@ -525,34 +658,38 @@ class MeshService : LifecycleService() {
                 )
             }
             // Relay regardless of whether we could decrypt (multi-hop delivery).
-            relayFrame(bytes)?.let { radio.advertiseRelayOnce(it, 2000L) }
+            relayFrame(bytes)?.let { enqueueRelay(it, 3) }
             return
         }
 
         // Public path (msgType 1/2).
-        var pocpOk = true
+        //
+        // A1: a frame WITHOUT a witness is relay-only — NEVER displayed. Before this fix the
+        // witness check was skipped entirely when both fields were zero, so a remote van could
+        // inject a fake "TEAR GAS" that displayed as DIRECT · VERIFIED on every phone.
+        //
+        // Display rules:
+        //   LOCAL     — witness must be PoCP-Valid against our cell (current or previous
+        //               epoch sketch bucket). CellMismatch/Stale: dropped entirely.
+        //   BROADCAST — witness MAC must be valid. Jaccard outcome only feeds the badge:
+        //               co-present origin vs remote-cell claim. A2: corroboration counts
+        //               ONLY claims heard DIRECTLY (origination TTL) and is shown as a HINT,
+        //               never as a boolean unlock (a single nearby attacker can forge two
+        //               dissimilar claims — the old distinct≥2 display lock was security theater).
+        var displayOk = false
         var relayOnly = false
+        var corroborations = 0u
         if (wp != null) {
-            val localSketch = MeshState.stats.value?.localSketch ?: emptyList<ULong>()
+            val msgType = wp.msgType.toInt()
             val hasWitness = wp.pocpWit.any { it != 0.toByte() } ||
                 wp.divSketch.any { it != 0.toByte() }
-            if (hasWitness) {
-                if (localSketch.isNotEmpty()) {
-                    val verdict = pocpVerifyWitnessLocal(
-                        localSketch,
-                        wp.divSketch,
-                        wp.epoch,
-                        wp.framePrefix,
-                        wp.pocpWit,
-                        cfg.tauThreshold,
-                    )
-                    when (verdict.toInt()) {
-                        0 -> {} // Valid
-                        1 -> if (wp.msgType.toInt() == 2) relayOnly = true else pocpOk = false // CellMismatch
-                        else -> pocpOk = false // Stale / bad MAC
-                    }
-                } else {
-                    pocpOk = false // no local sketch → cannot verify → drop
+            if (!hasWitness) {
+                relayOnly = true // A1: relay-only, never display
+            } else {
+                when (val verdict = verifyPocpAcrossRollover(wp.epoch, wp.divSketch, wp.framePrefix, wp.pocpWit, cfg)) {
+                    0 -> displayOk = true // Valid: co-present with our cell
+                    1 -> if (msgType == 2) displayOk = true // honest remote-cell broadcast
+                    // else: Stale MAC, or CellMismatch on LOCAL — no display, no relay
                 }
 
                 // R1: soft detection of div_sketch reuse across distinct marks (copy signal).
@@ -570,31 +707,38 @@ class MeshService : LifecycleService() {
                         MeshState.logDebug("R1: div_sketch reuse across distinct marks (copy signal)")
                     }
                 }
-            }
 
-            // H2: BroadcastCHAT multi-locale diversity gate — only when it would display.
-            if (pocpOk && !relayOnly && wp.msgType.toInt() == 2) {
-                val distinct = trust.recordVerification(wp.bodyHash, wp.divSketch, cfg.tauThreshold)
-                if (distinct < 2u) relayOnly = true // insufficient corroboration: relay, don't display
+                // A2: corroboration hint for broadcast — direct-heard claims only.
+                if (displayOk && msgType == 2) {
+                    corroborations = if (direct) {
+                        trust.recordVerification(wp.bodyHash, wp.divSketch, cfg.tauThreshold)
+                    } else {
+                        trust.distinctCount(wp.bodyHash)
+                    }
+                }
             }
         }
 
         // Relay if the frame is either displayable or relay-only.
-        if (pocpOk || relayOnly) {
-            relayFrame(bytes)?.let { radio.advertiseRelayOnce(it, 2000L) }
+        if (displayOk || relayOnly) {
+            relayFrame(bytes)?.let { enqueueRelay(it, wp?.msgType?.toInt() ?: 2) }
         }
 
-        // Display only when fully verified and not relay-only.
-        if (pocpOk && !relayOnly) {
+        // Display only when verified and not relay-only.
+        if (displayOk) {
             val text = frameBodyText(bytes)
             if (!text.isNullOrEmpty()) {
+                // B6: suppression keyed by (text, sender-mark prefix) — an attacker echoing
+                // the same words cannot suppress the real alert from a different sender.
+                val markHex = mark.joinToString("") { "%02x".format(it) }
+                val suppressKey = "$text|${markHex.take(8)}"
                 var suppress = false
                 synchronized(recentTexts) {
-                    val prevEpoch = recentTexts[text]
+                    val prevEpoch = recentTexts[suppressKey]
                     suppress = prevEpoch != null &&
                         ownEpoch >= prevEpoch &&
                         ownEpoch - prevEpoch <= 3u
-                    recentTexts[text] = ownEpoch
+                    recentTexts[suppressKey] = ownEpoch
                     if (recentTexts.size > 64) {
                         val iter = recentTexts.iterator()
                         while (iter.hasNext()) {
@@ -604,7 +748,6 @@ class MeshService : LifecycleService() {
                     }
                 }
                 if (!suppress) {
-                    val markHex = mark.joinToString("") { "%02x".format(it) }
                     val tier = if (wp?.msgType?.toInt() == 1) SendTier.LOCAL else SendTier.BROADCAST
                     MeshState.appendMessage(
                         MsgRow(
@@ -615,7 +758,8 @@ class MeshService : LifecycleService() {
                             text = text,
                             mine = false,
                             tier = tier,
-                            direct = direct
+                            direct = direct,
+                            corroborations = corroborations.toInt()
                         )
                     )
                 }
@@ -645,12 +789,25 @@ class MeshService : LifecycleService() {
         // TTL from the Rust core (invariant #1): local = 1 (relayable once so the
         // reflection receipt can come back), regional/private = 8.
         val ttl: UByte = if (localImmediate) defaultTtlLocal().toUByte() else defaultTtlRegional().toUByte()
-        // H1: include PoCP witness so receivers can verify physical co-presence.
-        // Falls back to bare makeMessageFrame when the local sketch is unavailable.
-        val sketch = MeshState.measurement.localSketch(epoch, seed, cfg.rssiFloorDbm)
-        val divSketch = pocpSketchToDivSketch(sketch)
+        // A1/C2: sign the current epoch's sketch; at rollover — when nothing has been heard
+        // yet this epoch — sign the PREVIOUS epoch's completed sketch with witness seed
+        // epoch-1 (receivers accept both). Only when neither epoch heard a single mark do
+        // we originate witnessless (relay-only at receivers — a device that hears nobody
+        // has nobody to display to, so nothing is lost).
+        val sketchCur = MeshState.measurement.localSketch(epoch, seed, cfg.rssiFloorDbm)
+        val sketchPrev = if (sketchCur.isEmpty()) {
+            MeshState.measurement.localSketch(epoch - 1u, seed, cfg.rssiFloorDbm)
+        } else {
+            emptyList()
+        }
+        val (sketch, witEpoch) = when {
+            sketchCur.isNotEmpty() -> sketchCur to epoch
+            sketchPrev.isNotEmpty() -> sketchPrev to (epoch - 1u)
+            else -> sketchCur to epoch
+        }
+        val divSketch = if (sketch.isNotEmpty()) pocpSketchToDivSketch(sketch) else null
         val frame = if (divSketch != null) {
-            makeMessageFrameWithWitness(seed, epoch, beaconSeed, localImmediate, effectiveText, ttl, divSketch)
+            makeMessageFrameWithWitness(seed, epoch, beaconSeed, localImmediate, effectiveText, ttl, divSketch, witEpoch)
         } else {
             makeMessageFrame(seed, epoch, beaconSeed, localImmediate, effectiveText)
         }
@@ -689,11 +846,14 @@ class MeshService : LifecycleService() {
         try {
             // Clear Rust in-memory state (the flag was already set; we call the function).
             panicWipe()
+            // C7: zero the live beacon seed too — previously it stayed in Rust memory,
+            // recoverable until process exit.
+            if (::beacon.isInitialized) beacon.wipe()
 
             // Clear Android persisted state.
             PairStore.wipe(this)
             ConfigStore.clear(this)
-            // Private-send nonce counter file and crash log.
+            // Legacy plaintext counter file (older installs) and crash log.
             getSharedPreferences(PAIR_PREFS_NAME, Context.MODE_PRIVATE).edit().clear().commit()
             getSharedPreferences("crash_log", Context.MODE_PRIVATE).edit().clear().commit()
 
@@ -702,13 +862,16 @@ class MeshService : LifecycleService() {
             MeshState.messages.value = emptyList()
             MeshState.debugLog.value = listOf("!!! PANIC WIPE at ${System.currentTimeMillis()}")
             MeshState.outgoingText.value = ""
-            MeshState.outgoingPrivate.value = null
+            // C7: force the UI to drop remembered Contact objects (they hold pair keys until
+            // GC — a documented JVM limit; recomposition to an empty list is the best we can do).
+            MeshState.contactsVersion.value += 1
 
             // Zeroize in-memory secrets. seed is lateinit — a cold-start ACTION_PANIC
             // (service never fully started) reaches here before seed is assigned.
             if (::seed.isInitialized) seed.fill(0)
             currentPublicFrame?.fill(0)
             currentPublicFrame = null
+            synchronized(relayQueueLock) { relayQueue.clear() }
             synchronized(marksLock) {
                 localImmediateMarks.forEach { it.fill(0) }
                 localImmediateMarks.clear()

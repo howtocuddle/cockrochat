@@ -56,6 +56,10 @@ pub enum DecodeErr {
     BadLen,
     BadVersion,
     BadType,
+    /// reserved[1..12] (wire bytes 215..226) must be zero. They are unsigned and unvalidated;
+    /// rejecting non-zero values now prevents silent covert-channel semantics from accreting
+    /// there before a future protocol version moves them into SIG_REGION (D3).
+    BadReserved,
 }
 
 /// Parsed wire frame (226 B, fixed-offset, big-endian).
@@ -88,6 +92,12 @@ pub fn decode(buf: &[u8]) -> Result<Frame, DecodeErr> {
     }
 
     let msg_type = MsgType::from_u8(arr[17]).ok_or(DecodeErr::BadType)?;
+
+    // D3: reserved[0] (byte 214) is the hop-mutable TTL; the remaining 11 reserved bytes
+    // are unsigned and carry no semantics in v1 — reject any non-zero value outright.
+    if arr[215..226].iter().any(|&b| b != 0) {
+        return Err(DecodeErr::BadReserved);
+    }
 
     let mark = *array_ref!(arr, 0, 16);
     let div_sketch = *array_ref!(arr, 18, 16);
@@ -142,5 +152,30 @@ mod tests {
         assert_eq!(MsgType::from_u8(3), Some(MsgType::Private));
         assert_eq!(MsgType::Private as u8, 3);
         assert_eq!(MsgType::from_u8(4), None);
+    }
+
+    #[test]
+    fn decode_rejects_nonzero_reserved_tail() {
+        let seed = [1u8; 32];
+        let bs = [2u8; 32];
+        let buf = crate::message::make_message_frame(&seed, 1, &bs, MsgType::RegionalPropagated, "x")
+            .expect("frame");
+        assert!(decode(&buf).is_ok());
+
+        // Byte 214 is the hop-mutable TTL — non-zero is fine.
+        let mut ttl_set = buf;
+        ttl_set[214] = 7;
+        assert!(decode(&ttl_set).is_ok(), "TTL byte must stay mutable");
+
+        // Bytes 215..226 must reject when non-zero (D3).
+        for i in 215..226 {
+            let mut bad = buf;
+            bad[i] = 1;
+            assert_eq!(
+                decode(&bad),
+                Err(DecodeErr::BadReserved),
+                "byte {i} non-zero must be rejected"
+            );
+        }
     }
 }

@@ -89,6 +89,7 @@ interface UiController {
     fun removeContact(label: String)
     fun myPublicHex(): String
     fun myQrPayload(): String
+    fun mySaltHex(): String
     fun launchQrScanner(onKey: (String) -> Unit)
     fun panicWipe()
     fun toast(msg: String)
@@ -127,6 +128,7 @@ fun ChatPane(controller: UiController, onOpenDrawer: () -> Unit) {
     val stats by MeshState.stats.collectAsStateWithLifecycle()
     val running by MeshState.running.collectAsStateWithLifecycle()
     val receipt by MeshState.receipt.collectAsStateWithLifecycle()
+    val storageOk by MeshState.secureStorageOk.collectAsStateWithLifecycle()
     var showPairing by rememberSaveable { mutableStateOf(false) }
 
     Column(
@@ -141,6 +143,20 @@ fun ChatPane(controller: UiController, onOpenDrawer: () -> Unit) {
             onTogglePower = { controller.setMeshRunning(it) }
         )
         HorizontalDivider(color = Hairline)
+
+        // D4: TEE-backed encrypted store unavailable — pairings are memory-only and die
+        // with the process. The user must HEAR this, not find it in a log after the fact.
+        if (!storageOk) {
+            Text(
+                "⚠ SECURE STORAGE UNAVAILABLE — pairings live in memory only and die with the app",
+                style = monoMicro(TrustAmber),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(TrustAmber.copy(alpha = 0.10f))
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+            )
+            HorizontalDivider(color = Hairline)
+        }
 
         MessageList(msgs, Modifier.weight(1f))
 
@@ -335,11 +351,14 @@ private fun Bubble(row: MsgRow) {
 }
 
 /**
- * Per-message trust badge. Every displayed frame already passed self-verify (PoW) and the
- * PoCP co-presence gate; what varies is HOW it arrived:
- *   ▮▮▮ DIRECT  — straight off the sender's radio: the sender is physically near you.
+ * Per-message trust badge (B10: every label maps to a property that was ACTUALLY checked).
+ *   ▮▮▮ DIRECT  — arrived at origination TTL: the sender's radio is physically near you.
  *   ▮▮  RELAYED — carried by mesh hops: content verified, sender may be far away.
- * Private frames add E2E: only the paired contact could have produced readable text.
+ *   LOCAL      — PoCP co-presence with our cell was verified ("CO-PRESENT").
+ *   BROADCAST  — witness MAC is valid; the number counts DISTINCT claims heard DIRECTLY
+ *                (origination TTL). It is a hint, not a proof — a determined nearby
+ *                attacker can forge claims (A2).
+ *   PRIVATE    — the body AEAD-opened under a paired key: only that contact could write it.
  */
 @Composable
 private fun TrustMeter(row: MsgRow, color: Color) {
@@ -348,8 +367,10 @@ private fun TrustMeter(row: MsgRow, color: Color) {
     val path = if (row.direct) "DIRECT" else "RELAYED"
     val proof = when (row.tier) {
         SendTier.PRIVATE -> "E2E"
-        SendTier.BROADCAST -> "CORROBORATED"
-        SendTier.LOCAL -> "VERIFIED"
+        SendTier.LOCAL -> "CO-PRESENT"
+        SendTier.BROADCAST ->
+            if (row.corroborations > 0) "${row.corroborations} NEARBY CLAIMS"
+            else "UNCORROBORATED ORIGIN"
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         MeterBars(bars, barColor)
@@ -401,9 +422,9 @@ private fun Composer(controller: UiController, onOpenPairing: () -> Unit) {
         Spacer(Modifier.height(5.dp))
         Text(
             when (tier) {
-                SendTier.LOCAL -> "Room range (~30 m). Repeats until a peer confirms receipt."
+                SendTier.LOCAL -> "Room range (~30 m). Repeats until heard back, then sparsely for up to 30 min."
                 SendTier.BROADCAST -> "Whole mesh, up to 8 hops. Repeats for 3 epochs."
-                SendTier.PRIVATE -> "End-to-end encrypted to one paired contact."
+                SendTier.PRIVATE -> "End-to-end encrypted to one paired contact. v2 pairings ratchet keys each epoch."
             },
             style = monoMicro(),
             modifier = Modifier.padding(start = 2.dp)
@@ -496,7 +517,11 @@ private fun PairingDialog(controller: UiController, onDismiss: () -> Unit) {
     val contacts = remember(contactsVersion) { controller.contacts() }
     var name by rememberSaveable { mutableStateOf("") }
     var peerKey by rememberSaveable { mutableStateOf("") }
+    // A3: the QR carries our key + a pairing salt. The salt must stay STABLE for as long
+    // as this QR is displayed — a peer pairing with the scanned code derives the chain
+    // seed from exactly these two values, so rotating mid-session would break the pairing.
     val myKey = remember { controller.myPublicHex() }
+    val mySalt = remember { controller.mySaltHex() }
     val qr = remember {
         val size = 640
         val matrix = QRCodeWriter().encode(
@@ -517,8 +542,11 @@ private fun PairingDialog(controller: UiController, onDismiss: () -> Unit) {
         text = {
             Column {
                 Text(
-                    "Share YOUR key out-of-band (QR photo, paper, another channel). " +
-                        "Add their key to pair. Keys never touch a server.",
+                    "Share YOUR code out-of-band and add theirs — both sides pair from the " +
+                        "SAME two codes. The QR carries your key + a salt; salts live only in " +
+                        "memory and are gone once the app closes, so past messages stay " +
+                        "unrecoverable even if a phone is later seized (forward secrecy). " +
+                        "Keys never touch a server.",
                     style = monoMicro(), lineHeight = 15.sp
                 )
                 Spacer(Modifier.height(10.dp))
@@ -528,6 +556,10 @@ private fun PairingDialog(controller: UiController, onDismiss: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 SelectionContainer {
                     Text(myKey, style = monoMicro(TextBright), lineHeight = 14.sp)
+                }
+                Spacer(Modifier.height(4.dp))
+                SelectionContainer {
+                    Text("SALT $mySalt", style = monoMicro(TierPrivate), lineHeight = 14.sp)
                 }
                 Spacer(Modifier.height(12.dp))
                 HorizontalDivider(color = Hairline)
@@ -541,7 +573,7 @@ private fun PairingDialog(controller: UiController, onDismiss: () -> Unit) {
                 Spacer(Modifier.height(6.dp))
                 OutlinedTextField(
                     value = peerKey, onValueChange = { peerKey = it },
-                    label = { Text("Their pairing key (hex)", style = monoMicro()) },
+                    label = { Text("Their pairing code (QR or hex)", style = monoMicro()) },
                     textStyle = monoBody(),
                     colors = darkFieldColors(), modifier = Modifier.fillMaxWidth()
                 )
@@ -556,6 +588,11 @@ private fun PairingDialog(controller: UiController, onDismiss: () -> Unit) {
                     contacts.forEach { c ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("🔒 ${c.label}", style = monoBody(), modifier = Modifier.weight(1f))
+                            Text(
+                                if (c.v2) "FS" else "LEGACY",
+                                style = monoMicro(if (c.v2) TierPrivate else TrustAmber),
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
                             Text(
                                 "REMOVE", style = monoMicro(PanicRed),
                                 modifier = Modifier.clickable { controller.removeContact(c.label) }.padding(4.dp)

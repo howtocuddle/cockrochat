@@ -14,7 +14,31 @@ data class MeshConfig(
     val advIntervalMs: Long = 1000L,
     val scanLowLatency: Boolean = true,
     val messageRepeatEpochs: Int = 3
-)
+) {
+    companion object {
+        // C1: safe ranges. Values outside these are clamped on load and on apply —
+        // τ=0 would make every sketch match, minHearers=0 makes the beacon constant-entropy,
+        // and mismatched epochMs silently partitions the mesh via the K4 skew-drop.
+        val EPOCH_RANGE = 5_000L..120_000L
+        val BEACON_FLOOR_RANGE = 1_000L..120_000L
+        val MIN_HEARERS_RANGE = 1..16
+        val TAU_RANGE = 0.10f..0.90f
+        val RSSI_FLOOR_RANGE = -100..-40
+        val ADV_INTERVAL_RANGE = 100L..5_000L
+        val REPEAT_EPOCHS_RANGE = 1..12
+    }
+
+    /** C1: clamp every field into its safe range. */
+    fun sanitized(): MeshConfig = copy(
+        epochMs = epochMs.coerceIn(EPOCH_RANGE),
+        beaconFloorMs = beaconFloorMs.coerceIn(BEACON_FLOOR_RANGE),
+        minHearers = minHearers.coerceIn(MIN_HEARERS_RANGE),
+        tauThreshold = tauThreshold.coerceIn(TAU_RANGE),
+        rssiFloorDbm = rssiFloorDbm.coerceIn(RSSI_FLOOR_RANGE),
+        advIntervalMs = advIntervalMs.coerceIn(ADV_INTERVAL_RANGE),
+        messageRepeatEpochs = messageRepeatEpochs.coerceIn(REPEAT_EPOCHS_RANGE)
+    )
+}
 
 object ConfigStore {
     private const val PREFS_NAME = "mesh_cfg"
@@ -40,7 +64,7 @@ object ConfigStore {
             advIntervalMs = prefs.getLong(KEY_ADV_INTERVAL, 1000L),
             scanLowLatency = prefs.getBoolean(KEY_SCAN_LOW_LATENCY, true),
             messageRepeatEpochs = prefs.getInt(KEY_MESSAGE_REPEAT_EPOCHS, 3)
-        )
+        ).sanitized() // C1: stored footguns (τ=0, minHearers=0, …) never reach the engine
     }
 
     fun save(ctx: Context, cfg: MeshConfig) {

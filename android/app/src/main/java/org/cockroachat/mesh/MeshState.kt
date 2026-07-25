@@ -26,29 +26,21 @@ data class MsgRow(
     val tier: SendTier = SendTier.BROADCAST,
     /** True when the frame arrived at its origination TTL — straight off the sender's
      *  radio, no relay hop. Drives the per-message trust meter. */
-    val direct: Boolean = false
+    val direct: Boolean = false,
+    /** A2: distinct DIRECT-heard claims for this alert body. A HINT for the user —
+     *  never a proof (a determined nearby attacker can forge claims). */
+    val corroborations: Int = 0
 )
 
 enum class SendTier { LOCAL, BROADCAST, PRIVATE }
 
-/** A queued private (Tier-3) message: recipient's derived pair key + plaintext + display label. */
+/** A queued private (Tier-3) message: recipient label + plaintext. The pair key is
+ *  resolved (and ratcheted, A3) by the service at seal time — no key material rides
+ *  the queue. */
 data class PrivateSend(
-    val pairKey: ByteArray,
-    val text: String,
-    val label: String
-) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is PrivateSend) return false
-        return pairKey.contentEquals(other.pairKey) && text == other.text && label == other.label
-    }
-    override fun hashCode(): Int {
-        var result = pairKey.contentHashCode()
-        result = 31 * result + text.hashCode()
-        result = 31 * result + label.hashCode()
-        return result
-    }
-}
+    val label: String,
+    val text: String
+)
 
 object MeshState {
     val running = MutableStateFlow(false)
@@ -85,17 +77,22 @@ object MeshState {
 
     val outgoingTier = MutableStateFlow(SendTier.BROADCAST)
 
-    // A one-shot private message request. The service consumes it (VDL solve + seal + advertise)
-    // then resets it to null. Non-null means "a private send is queued or in progress".
-    val outgoingPrivate = MutableStateFlow<PrivateSend?>(null)
+    // C4: private-send QUEUE (was a single-slot StateFlow — two quick sends overwrote each
+    // other and the reset could erase a send queued during the VDL solve). The service
+    // consumes sequentially; trySend failure means the queue is full.
+    val privateSends = kotlinx.coroutines.channels.Channel<PrivateSend>(capacity = 8)
 
-    /** Delivery-receipt notice shown above the composer ("carried by mesh", "received by a
-     *  nearby peer", "stopped without confirmation"). Null = nothing to show. Set by the
-     *  service on reflection/expiry; cleared when a new message is composed. */
+    /** Delivery-receipt notice shown above the composer ("heard back once", "stopped").
+     *  Null = nothing to show. Set by the service on reflection/expiry; cleared when a
+     *  new message is composed. B1: wording must never imply guaranteed delivery. */
     val receipt = MutableStateFlow<String?>(null)
 
     /** Bumped whenever the pairing contact list changes so the UI recomposes. */
     val contactsVersion = MutableStateFlow(0)
+
+    /** D4: false when the TEE-backed encrypted store is unavailable and pairings live in
+     *  memory only (die on process death). Surfaced as a banner, not just a log line. */
+    val secureStorageOk = MutableStateFlow(true)
 
     @Volatile
     var outgoingSetAtEpoch: UInt? = null
