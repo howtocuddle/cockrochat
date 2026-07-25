@@ -1,4 +1,4 @@
-// cockroachat-laptop — Linux laptop BLE mesh node.
+// bileichat-laptop — Linux laptop BLE mesh node.
 //
 // Advertises own frame as BLE extended advertising (SecondaryChannel::OneM)
 // and scans for peer frames.  ALL frame origination and parsing goes through
@@ -34,8 +34,8 @@ const MESH_UUID_STR: &str = "6c6f6361-6c6d-4573-6800-000000000001";
 // ─── CLI ──────────────────────────────────────────────────────────────────────
 #[derive(Parser, Debug)]
 #[command(
-    name = "cockroachat-laptop",
-    about = "Cockroachat BLE mesh node (Linux laptop)"
+    name = "bileichat-laptop",
+    about = "BileiChat BLE mesh node (Linux laptop)"
 )]
 struct Args {
     /// Epoch length in milliseconds — MUST match phone default (10000)
@@ -140,7 +140,7 @@ async fn main() -> anyhow::Result<()> {
     adapter.set_powered(true).await?;
 
     let powered = adapter.is_powered().await?;
-    println!("=== cockroachat-laptop ===");
+    println!("=== bileichat-laptop ===");
     println!("Adapter : {}  powered={}", adapter.name(), powered);
     println!("Epoch ms: {}", args.epoch_ms);
     println!("RSSI floor: {} dBm", args.rssi_floor);
@@ -381,7 +381,7 @@ async fn register_adv(
     // Drop old advertisement first.
     drop(old_handle);
 
-    let frame = match make_message_frame(seed, epoch, MsgType::RegionalPropagated, text) {
+    let frame = match make_message_frame(seed, epoch, seed, MsgType::RegionalPropagated, text) {
         Some(f) => f,
         None => {
             eprintln!("ERROR: make_message_frame returned None — text too long? ({} bytes)", text.len());

@@ -1,4 +1,4 @@
-package org.cockroachat.mesh
+package org.bileichat.mesh
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.text.SimpleDateFormat
@@ -29,8 +29,22 @@ data class MsgRow(
     val direct: Boolean = false,
     /** A2: distinct DIRECT-heard claims for this alert body. A HINT for the user —
      *  never a proof (a determined nearby attacker can forge claims). */
-    val corroborations: Int = 0
+    val corroborations: Int = 0,
+    /** For PRIVATE messages: the paired contact label (e.g. "ALICE"). Null for non-private. */
+    val contactLabel: String? = null,
+    /**
+     * True when the PoCP witness verified against a local cell holding fewer than
+     * [MIN_TRUSTWORTHY_CELL] marks. The witness MAC key is derived from public material, so
+     * co-presence rests entirely on the Jaccard ratio — and a one-element claim scores 1/N,
+     * clearing tau for any cell of 3 or fewer. An attacker who has never been near the cell
+     * can sweep all 256 single-byte sketches and land 2-3 accepted forgeries. Verification
+     * at that size is not evidence, so the badge must not claim it is.
+     */
+    val lowConfidenceCell: Boolean = false
 )
+
+/** Below this many marks in our own cell, a verified witness is not meaningful evidence. */
+const val MIN_TRUSTWORTHY_CELL = 4
 
 enum class SendTier { LOCAL, BROADCAST, PRIVATE }
 
@@ -75,7 +89,25 @@ object MeshState {
     // Outgoing message text
     val outgoingText = MutableStateFlow("")
 
+    /**
+     * Bumped on every explicit send. MutableStateFlow conflates equal values, so re-sending
+     * the SAME text was a silent no-op: the collector in MeshService never fired, no frame
+     * was ever built, and outgoingSetAtEpoch/reflectionHeard were never reset — yet the
+     * user's own bubble was still appended, so the message looked sent. Sending "HELP"
+     * twice in a row transmitted once.
+     */
+    val outgoingRevision = MutableStateFlow(0)
+
+    /** Tier the NEXT outgoing message is sent at. Changing this re-originates the current
+     *  frame with a new TTL and msgType, so it must only change on an explicit send-tier
+     *  choice — never as a side effect of reading a different feed. */
     val outgoingTier = MutableStateFlow(SendTier.BROADCAST)
+
+    /** Tier whose feed is currently VISIBLE. Split from [outgoingTier]: the tab bar drove
+     *  both, so switching tabs to read LOCAL traffic mutated how an in-flight broadcast was
+     *  being transmitted. Selecting a tab still sets the send tier to match (that is the
+     *  intuitive behaviour) — but a bare view change no longer does. */
+    val viewTier = MutableStateFlow(SendTier.BROADCAST)
 
     // C4: private-send QUEUE (was a single-slot StateFlow — two quick sends overwrote each
     // other and the reset could erase a send queued during the VDL solve). The service
@@ -93,6 +125,14 @@ object MeshState {
     /** D4: false when the TEE-backed encrypted store is unavailable and pairings live in
      *  memory only (die on process death). Surfaced as a banner, not just a log line. */
     val secureStorageOk = MutableStateFlow(true)
+
+    /**
+     * Set when frames are being dropped because the sender's epoch is more than ±2 buckets
+     * from ours (K4). Mismatched clocks or a mismatched epochMs partition the mesh totally
+     * and silently — a rate-limited debug line was the only trace, so a user just saw "no
+     * messages" with no reason. Cleared once traffic verifies again.
+     */
+    val clockSkewWarning = MutableStateFlow<String?>(null)
 
     @Volatile
     var outgoingSetAtEpoch: UInt? = null

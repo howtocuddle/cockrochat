@@ -1,10 +1,10 @@
-# cockroachat-laptop
+# bileichat-laptop
 
-BLE mesh chat node for Linux laptops — interoperates with the Android cockroachat app.
+BLE mesh chat node for Linux laptops — interoperates with the Android bileichat app.
 
 **Build:** `cd laptop && cargo build --release`
 
-**Run:** `sudo ./target/release/cockroachat-laptop [--epoch-ms 10000] [--rssi-floor -80] [--text "hello"]`
+**Run:** `sudo ./target/release/bileichat-laptop [--epoch-ms 10000] [--rssi-floor -80] [--text "hello"]`
 
 **Output lines:**
 - `[HH:MM:SS.mmm] rssi=X dBm mark=AABBCCDD epoch=N text="..."` — received peer frame (deduplicated)

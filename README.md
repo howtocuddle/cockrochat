@@ -1,4 +1,4 @@
-# cockroachat
+# bileichat
 
 **Offline Decentralized Mesh Messaging for Protests & Emergencies**
 
@@ -11,11 +11,11 @@
 
 ---
 
-## What is cockroachat?
+## What is bileichat?
 
 During protests, civil demonstrations, or natural disasters, cellular networks and Wi-Fi are frequently jammed, monitored, or shut down. 
 
-**cockroachat** turns nearby smartphones into a resilient, self-healing peer-to-peer mesh network. Devices pass short emergency alerts phone-to-phone through the crowd automatically.
+**bileichat** turns nearby smartphones into a resilient, self-healing peer-to-peer mesh network. Devices pass short emergency alerts phone-to-phone through the crowd automatically.
 
 ### Key Highlights
 - **100% Offline & Serverless**: Works entirely over Bluetooth Low Energy (BLE 5.0).
@@ -137,7 +137,7 @@ The protocol uses a 3-tier messaging model to balance latency, crowd coverage, a
 ```bash
 # Clone the repository
 git clone https://github.com/howtocuddle/cockrochat.git
-cd cockroachat/mesh-core
+cd bileichat/mesh-core
 
 # Run test suite (cryptographic vectors, codec safety, property tests)
 cargo test
@@ -154,7 +154,7 @@ sudo cargo run
 
 ## Technical Glossary
 
-This glossary explains technical terms and protocol concepts used throughout `cockroachat`.
+This glossary explains technical terms and protocol concepts used throughout `bileichat`.
 
 ### Cryptography & Security Terms
 
@@ -172,7 +172,7 @@ This glossary explains technical terms and protocol concepts used throughout `co
 - **BLE 5.0 Extended Advertising**: A Bluetooth Low Energy standard allowing devices to broadcast larger packets (up to 255 bytes) without requiring Bluetooth pairing.
 - **Epoch**: A fixed time window (e.g., 10 seconds in testing, minutes in production) during which devices sample background signals and rotate internal keys.
 - **Frame Hash (Dedup Key)**: A unique 16-byte identifier computed from a message's contents, allowing relay nodes to ignore duplicate broadcasts.
-- **Jaccard Similarity ($\tau$)**: A mathematical formula measuring set similarity. In `cockroachat`, it determines whether two devices share the same physical radio environment.
+- **Jaccard Similarity ($\tau$)**: A mathematical formula measuring set similarity. In `bileichat`, it determines whether two devices share the same physical radio environment.
 - **KMV Sketch (K-Minimum Values)**: A compact summary of ambient Bluetooth signals, allowing devices to compare physical surroundings efficiently in memory.
 - **LE Coded PHY**: A Bluetooth 5 mode using error correction (S=8) to quadruple radio range, ideal for dense or obstructed crowd environments.
 - **Parse-Before-Forward**: The security rule requiring every packet to be fully validated in Rust before being displayed or relayed.

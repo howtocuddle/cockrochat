@@ -1,6 +1,39 @@
 //! `pocp` — Proof-of-Co-Presence. Cell digest (fuzzy KMV over overheard marks) + spacetime
 //! witness. Blocks the remote-van flood: you cannot forge co-presence you did not physically
 //! observe. See README.md §4. `tau` is MEASURED (RF-overlap rig), never guessed.
+//!
+//! # KNOWN LIMIT: no protection for cells smaller than 4 marks
+//!
+//! [`witness_key`] is derived from `div_sketch || seed`, both public, so the MAC is
+//! anti-malleability only — anyone can compute a valid witness for any sketch they care to
+//! claim (documented at [`witness`]). The entire co-presence guarantee therefore rests on
+//! [`jaccard`] clearing `tau`, and that is a RATIO with no absolute-count floor: a claim of
+//! a single element scores `1/N` against an N-mark local cell, which clears `tau = 0.3`
+//! whenever `N <= 3`.
+//!
+//! The claimed element is one wire byte. So an attacker who has never been anywhere near
+//! the cell can enumerate all 256 single-element sketches, compute a valid witness for each
+//! for free, and land roughly 2–3 accepted forgeries against any 2–3 device cell —
+//! measured, over 200 random cells per size:
+//!
+//! ```text
+//! cell size | accepted forgeries per 256-frame sweep
+//!         2 | 2.00
+//!         3 | 2.98
+//!         4 | 0.17
+//!         5 | 0.01
+//!        8+ | 0.00
+//! ```
+//!
+//! Large crowds are protected as designed; small clandestine cells are not, and those are
+//! the higher-value target. Until the witness MAC is keyed by a fuzzy extractor over the
+//! full u64 sketch (the deferred M6+ item noted at [`witness`]), **callers must not present
+//! a verified witness as trustworthy when the local sketch holds fewer than 4 marks** — the
+//! Android shim degrades the badge to LOW-CONFIDENCE below that threshold.
+//!
+//! A count floor (`intersection >= 2`) would close the grind, but it also rejects the
+//! 1-element sketch a cold-started phone legitimately has, which is exactly how LOCAL
+//! delivery broke before self-inclusion. The two must be redesigned together.
 
 use std::collections::BTreeSet;
 
@@ -72,10 +105,27 @@ pub fn matches(a: &CellSketch, b: &CellSketch, tau: f32) -> bool {
 
 /// Truncate a `CellSketch` to 16 bytes for the wire `div_sketch` field.
 /// Takes the low byte of each u64 slot. High bytes are discarded.
+///
+/// A real slot whose low byte is 0xFF is remapped to 0xFE, because 0xFF is also the KMV
+/// padding sentinel that [`div_sketch_to_cell`] maps back to `u64::MAX` and `jaccard`
+/// filters out. Without the remap that element simply vanished from the comparison — and
+/// for a lone sender, whose sketch holds only its own mark, the whole wire sketch became
+/// `[0xFF; 16]`, the "empty cell" encoding. Every receiver then scored Jaccard 0.0 and
+/// dropped the frame, so 1 in 256 epochs a solitary originator was undisplayable
+/// mesh-wide. Marks rotate per epoch, so it self-healed — but silently, and only next epoch.
+///
+/// The cost is a 0xFE/0xFF aliasing collision at the same ~1/256 per-slot rate, which
+/// merely adds a false MATCH between two honest sketches. Trading a hard availability
+/// failure for a marginal similarity false-positive is the safe direction.
 pub fn sketch_to_div_sketch(sketch: &CellSketch) -> [u8; 16] {
     let mut out = [0u8; 16];
     for (i, slot) in sketch.0.iter().enumerate() {
-        out[i] = *slot as u8;
+        out[i] = if *slot == u64::MAX {
+            0xFF // genuinely an empty KMV slot
+        } else {
+            let b = *slot as u8;
+            if b == 0xFF { 0xFE } else { b }
+        };
     }
     out
 }
@@ -207,10 +257,12 @@ mod tests {
         let sketch = test_sketch(&[0xDEADBEEF00000042, 0xCAFE0000000000FF]);
         let div = sketch_to_div_sketch(&sketch);
         assert_eq!(div[0], 0x42);
-        assert_eq!(div[1], 0xFF);
-        // remaining slots must be 0xFF (u64::MAX low byte)
+        // A REAL element with low byte 0xFF is remapped to 0xFE so it cannot be mistaken
+        // for the KMV padding sentinel and silently dropped from the comparison.
+        assert_eq!(div[1], 0xFE);
+        // remaining slots are genuinely empty and stay 0xFF
         for (slot, val) in div.iter().enumerate().skip(2) {
-            assert_eq!(*val, 0xFF, "slot {slot}: u64::MAX low byte is 0xFF");
+            assert_eq!(*val, 0xFF, "slot {slot}: empty KMV slot encodes as 0xFF");
         }
     }
 
@@ -261,8 +313,10 @@ mod tests {
         let div_d = sketch_to_div_sketch(&d);
         assert_eq!(div_c[0], 0x42);
         assert_eq!(div_d[0], 0x42);
-        assert_eq!(div_c[1], 0xFF);
-        assert_eq!(div_d[1], 0xFF);
+        // Real elements ending in 0xFF remap to 0xFE — consistently on both sides, so two
+        // honest sketches still agree, which is what this round-trip test is checking.
+        assert_eq!(div_c[1], 0xFE);
+        assert_eq!(div_d[1], 0xFE);
     }
 
     // ---- witness MAC ----
@@ -430,5 +484,118 @@ mod tests {
 
         // Verify round-trip
         assert!(verify_witness(&div, seed, prefix, &wit));
+    }
+
+    // ---- Self-inclusion in the cell sketch (P2/P3/P5) ----
+    //
+    // A device never records its OWN mark from the air, so "marks I heard" excludes self.
+    // With exactly two phones that made the two sketches disjoint, which is Jaccard 0.0 and
+    // an automatic CellMismatch: LOCAL could never display on a two-device setup, and a
+    // phone that had heard nobody built an EMPTY sketch and originated a witnessless frame
+    // that every receiver relayed but never showed. The shim now includes its own mark, so
+    // a cell is "the devices in RF range of each other, including me".
+
+    #[test]
+    fn two_mutual_neighbours_without_self_inclusion_are_disjoint() {
+        // The old behaviour, asserted so the regression is visible if it ever comes back.
+        let mark_a = [0xA1u8; 16];
+        let mark_b = [0xB2u8; 16];
+        let epoch = 77u32;
+        // A heard only B; B heard only A.
+        let a = observe(&[mark_b], &[-50], epoch, -80);
+        let b = observe(&[mark_a], &[-50], epoch, -80);
+        let sim = jaccard(
+            &div_sketch_to_cell(&sketch_to_div_sketch(&a)),
+            &div_sketch_to_cell(&sketch_to_div_sketch(&b)),
+        );
+        assert_eq!(sim, 0.0, "disjoint sketches — this is why LOCAL never displayed");
+        assert!(!matches(&a, &b, 0.3), "below default tau");
+    }
+
+    /// A real mark whose low byte is 0xFF must not encode as the empty-cell sentinel.
+    #[test]
+    fn real_ff_low_byte_does_not_encode_as_empty_slot() {
+        // Slot value with low byte 0xFF, plus 15 genuinely empty slots.
+        let mut arr = [u64::MAX; 16];
+        arr[0] = 0x1234_5678_9ABC_DEFF;
+        let div = sketch_to_div_sketch(&CellSketch(arr));
+        assert_ne!(div[0], 0xFF, "real element must not collide with the padding sentinel");
+        assert_eq!(div[0], 0xFE);
+        assert_eq!(&div[1..], &[0xFFu8; 15], "empty slots stay 0xFF");
+
+        // The round-tripped cell must be non-empty, so a lone sender with such a mark is
+        // still comparable instead of scoring 0.0 against everyone for the whole epoch.
+        let cell = div_sketch_to_cell(&div);
+        let live = cell.0.iter().filter(|v| **v != u64::MAX).count();
+        assert_eq!(live, 1);
+    }
+
+    #[test]
+    fn lone_sender_with_ff_mark_still_matches_a_receiver_holding_it() {
+        // Receiver's cell contains the sender's 0xFF-low-byte mark plus its own.
+        let mut sender = [u64::MAX; 16];
+        sender[0] = 0x00FF;
+        let mut receiver = [u64::MAX; 16];
+        receiver[0] = 0x00FF;
+        receiver[1] = 0x0042;
+
+        let claim = div_sketch_to_cell(&sketch_to_div_sketch(&CellSketch(sender)));
+        let local = div_sketch_to_cell(&sketch_to_div_sketch(&CellSketch(receiver)));
+        // Before the remap this was 0.0 (claim decoded as the empty cell) and the frame was
+        // dropped by every phone in range.
+        assert!(jaccard(&claim, &local) >= 0.3, "j={}", jaccard(&claim, &local));
+    }
+
+    #[test]
+    fn two_mutual_neighbours_with_self_inclusion_match() {
+        let mark_a = [0xA1u8; 16];
+        let mark_b = [0xB2u8; 16];
+        let epoch = 77u32;
+        // A heard B and includes itself; B heard A and includes itself.
+        let a = observe(&[mark_b, mark_a], &[-50, 0], epoch, -80);
+        let b = observe(&[mark_a, mark_b], &[-50, 0], epoch, -80);
+        let sim = jaccard(
+            &div_sketch_to_cell(&sketch_to_div_sketch(&a)),
+            &div_sketch_to_cell(&sketch_to_div_sketch(&b)),
+        );
+        assert_eq!(sim, 1.0, "identical cell membership");
+        assert!(matches(&a, &b, 0.3));
+    }
+
+    #[test]
+    fn cold_start_sender_still_overlaps_the_receiver() {
+        // A has just started and has heard NOBODY, so its sketch is {self} only. The
+        // receiver B has already heard A (ingest records the mark before verifying), so
+        // B's sketch is {A, B}. Overlap = {A} of union {A, B} = 0.5, above the 0.3 default.
+        // Before self-inclusion A's sketch was EMPTY and it shipped a witnessless frame.
+        let mark_a = [0xA1u8; 16];
+        let mark_b = [0xB2u8; 16];
+        let epoch = 5u32;
+        let a = observe(&[mark_a], &[0], epoch, -80);
+        let b = observe(&[mark_a, mark_b], &[-50, 0], epoch, -80);
+        assert_ne!(sketch_to_div_sketch(&a), [0xFFu8; 16], "sketch must not be empty");
+        let sim = jaccard(
+            &div_sketch_to_cell(&sketch_to_div_sketch(&b)),
+            &div_sketch_to_cell(&sketch_to_div_sketch(&a)),
+        );
+        assert!(sim >= 0.3, "cold-start claim must clear default tau, got {sim}");
+    }
+
+    #[test]
+    fn remote_attacker_still_fails_with_self_inclusion() {
+        // Self-inclusion must not weaken PoCP: a device that never shared RF with the
+        // verifier holds a disjoint mark set and is still rejected.
+        let mark_a = [0xA1u8; 16];
+        let mark_b = [0xB2u8; 16];
+        let mark_van = [0xE9u8; 16];
+        let mark_van2 = [0xEEu8; 16];
+        let epoch = 12u32;
+        let victim = observe(&[mark_b, mark_a], &[-50, 0], epoch, -80);
+        // The van hears only its own accomplice, never A or B.
+        let van = observe(&[mark_van2, mark_van], &[-50, 0], epoch, -80);
+        assert!(
+            !matches(&victim, &van, 0.3),
+            "a remote cell must never clear tau"
+        );
     }
 }

@@ -1,4 +1,4 @@
-package org.cockroachat.mesh
+package org.bileichat.mesh
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.mesh_core.BeaconFfi
 import uniffi.mesh_core.FfiDedup
+import uniffi.mesh_core.FfiDedupVerdict
 import uniffi.mesh_core.FfiTrust
 import uniffi.mesh_core.beaconEntropy
 import uniffi.mesh_core.defaultTtlLocal
@@ -48,7 +50,7 @@ class MeshService : LifecycleService() {
         const val CHANNEL_NAME = "Mesh BLE"
 
         /** Start the service with this action to trigger an immediate panic wipe. */
-        const val ACTION_PANIC = "org.cockroachat.mesh.ACTION_PANIC"
+        const val ACTION_PANIC = "org.bileichat.mesh.ACTION_PANIC"
 
         // Legacy plaintext counter prefs file (B4/C9: counter moved into PairStore's
         // encrypted store with a per-epoch random base). performPanicWipe still deletes
@@ -66,6 +68,11 @@ class MeshService : LifecycleService() {
 
         /** B8: relay queue bound; lowest-priority tasks are evicted when full. */
         const val RELAY_QUEUE_CAP = 64
+
+        /** verifyPocpAcrossRollover: no local sketch exists for any candidate bucket, so the
+         *  frame could not be judged at all. Distinct from Stale (a real MAC failure) because
+         *  it is transient — the same frame may verify moments later. */
+        const val POCP_NO_LOCAL_SKETCH = 3
 
         /**
          * Trigger a panic wipe from anywhere. Sets the Rust flag (the running service's
@@ -93,9 +100,26 @@ class MeshService : LifecycleService() {
     private var currentPublicFrame: ByteArray? = null
     private var privateTransportActive = false
 
-    /** Hash of our currently-advertised public frame — used to hear our own reflection
-     *  coming back through the mesh (send-and-listen). Cleared after one reaction. */
-    private var ownFrameHash: ByteArray? = null
+    /**
+     * P4: hashes of our RECENTLY-originated public frames — used to hear our own reflection
+     * coming back through the mesh (send-and-listen), keyed by hex hash.
+     *
+     * This was a single slot, overwritten by every rebuildAndAdvertise (epoch rollover, tier
+     * switch, outgoing-text change, advertising self-heal). Relays are queued behind a 250 ms
+     * poll and aired for 2 s, so an echo that crossed an epoch boundary was compared against
+     * a DIFFERENT hash and the receipt never fired — the sender kept re-transmitting until
+     * "no echo heard", even though the receiver had displayed the message. Keeping a few
+     * epochs of hashes closes that window.
+     *
+     * Entries older than [ownHashRetentionEpochs] are evicted.
+     * Guarded by [ownHashesLock]: written on the service coroutine, read on BLE binder threads.
+     */
+    private data class OwnFrame(val epoch: UInt, val carriedText: Boolean)
+    private val ownHashesLock = Any()
+    private val ownHashes = LinkedHashMap<String, OwnFrame>()
+
+    /** Hashes we have already reacted to, so the receipt still fires once per origination. */
+    private val ownHashesAcked = HashSet<String>()
 
     /** Set when a relayed echo of our frame is heard (receipt). B1: an echo proves only
      *  that ONE (possibly adversarial) peer relayed us once — LOCAL no longer hard-stops
@@ -126,6 +150,10 @@ class MeshService : LifecycleService() {
     // Track whether the first frame of the current epoch has been logged.
     private var firstFrameEpoch: UInt? = null
 
+    // Rate-limit the dedup bucket-full warning to once per epoch.
+    @Volatile
+    private var lastBucketFullEpoch: UInt? = null
+
     // B8: prioritized relay queue. Priority: LOCAL echo (0) > regional (1) > private (2);
     // FIFO within a class. Drained by a service coroutine whenever the radio has a free
     // hardware slot — frames WAIT instead of being silently dropped (B8 starvation fix).
@@ -153,9 +181,17 @@ class MeshService : LifecycleService() {
     private val sketchSeen = HashMap<String, String>()
     private var sketchSeenEpoch: UInt = 0u
 
+    private lateinit var wakeLock: PowerManager.WakeLock
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+
+        // Prepare the wake lock but do NOT acquire it yet — if the start aborts before
+        // startForeground succeeds, an acquired lock would outlive the failed service.
+        // Acquired in onStartCommand once the service is genuinely in the foreground.
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "bileichat:mesh")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -173,9 +209,27 @@ class MeshService : LifecycleService() {
         // startForegroundService on the live instance) must not re-init identity,
         // collectors, or the epoch loop.
         if (started) return START_STICKY
+
+        // P1: startForeground throws SecurityException on API 34+ when the connectedDevice
+        // FGS type is claimed without a Bluetooth permission. Uncaught, that killed the
+        // process the moment the service started — indistinguishable from "the app quit".
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification("Starting…"))
+        } catch (e: Exception) {
+            MeshState.logDebug("startForeground failed: ${e.message}")
+            MeshState.running.value = false
+            stopSelf()
+            return START_NOT_STICKY
+        }
         started = true
 
-        startForeground(NOTIFICATION_ID, buildNotification("Starting…"))
+        // Now in the foreground: keep the CPU awake so Doze cannot suspend BLE scans and
+        // advertisements. Failure here must not abort the mesh.
+        try {
+            if (!wakeLock.isHeld) wakeLock.acquire()
+        } catch (e: Exception) {
+            MeshState.logDebug("wake lock acquire failed: ${e.message}")
+        }
 
         MeshState.running.value = true
         MeshState.logDebug("service started")
@@ -190,6 +244,16 @@ class MeshService : LifecycleService() {
 
         // Log radio capability once at start
         MeshState.logDebug(radio.capabilityReport())
+        if (!radio.extendedAdvCapable()) {
+            // P6: this phone cannot put a 226-byte frame in an advertisement. It stays a full
+            // mesh member, but every frame it sends OR relays travels over the GATT plane,
+            // which needs a connection (bounded by GattPlane.MAX_PEERS) rather than a
+            // broadcast. Say so plainly — this was previously invisible.
+            MeshState.logDebug(
+                "NOTE: no extended advertising on this adapter — frames and relays travel " +
+                    "over the GATT plane only (connection-based, fewer simultaneous peers)"
+            )
+        }
 
         // Set up GATT fallback plane
         gattPlane = GattPlane(
@@ -250,11 +314,12 @@ class MeshService : LifecycleService() {
                 val epoch = (System.currentTimeMillis() / cfg2.epochMs).toUInt()
                 val pairKey = PairStore.keyForSend(this@MeshService, ps.label, epoch)
                 if (pairKey == null) {
-                    MeshState.logDebug("private send dropped: contact '${ps.label}' unknown or key ratchet failed")
+                    // No label in the log: it is exportable and would name your contacts.
+                    MeshState.logDebug("private send dropped: contact unknown or key ratchet failed")
                     continue
                 }
                 val counter = PairStore.nextPrivateCounter(this@MeshService, epoch)
-                MeshState.logDebug("sealing private message → ${ps.label} (VDL solve, ~seconds of CPU)…")
+                MeshState.logDebug("sealing private message (VDL solve, ~seconds of CPU)…")
                 val frame = withContext(Dispatchers.Default) {
                     val beaconSeed = beacon.seed()
                     makePrivateFrame(seed, epoch, beaconSeed, pairKey, ps.text, counter.toULong())
@@ -311,8 +376,12 @@ class MeshService : LifecycleService() {
                     if (radio.relayCapacityAvailable()) relayQueue.removeFirstOrNull() else null
                 }
                 if (task != null) {
-                    radio.advertiseRelayOnce(task.frame, 2000L, MeshState.config.codedPhy)
+                    // P6: on adapters without extended advertising the over-the-air relay is
+                    // impossible; the GATT plane is then the ONLY multi-hop path, so it runs
+                    // unconditionally. Pace the loop so a legacy phone doesn't spin the queue.
+                    val onAir = radio.advertiseRelayOnce(task.frame, 2000L, MeshState.config.codedPhy)
                     gattPlane.relayOnce(task.frame)
+                    if (!onAir) delay(250L)
                 } else {
                     delay(250L)
                 }
@@ -405,6 +474,18 @@ class MeshService : LifecycleService() {
                     ) "" else rawText
                     rebuildAndAdvertise(epoch, cfg, currentText)
 
+                    // Step v2 pair chains with the clock so a long idle period can never
+                    // exceed the ratchet span cap and brick private messaging (see
+                    // PairStore.fastForwardChains). One BLAKE3 per contact per epoch.
+                    // On IO: this touches EncryptedSharedPreferences.
+                    launch(Dispatchers.IO) {
+                        try {
+                            PairStore.fastForwardChains(this@MeshService, epoch)
+                        } catch (e: Exception) {
+                            MeshState.logDebug("chain fast-forward failed: ${e.message}")
+                        }
+                    }
+
                     // Log epoch rollover with neighbor/total counts
                     val neighbors = MeshState.measurement.neighborsDirect(epoch)
                     val total = MeshState.measurement.totalHeard()
@@ -465,8 +546,16 @@ class MeshService : LifecycleService() {
     }
 
     override fun onDestroy() {
-        radio.stop()
-        gattPlane.stop()
+        // P1: these are lateinit and are only assigned partway through onStartCommand. If the
+        // start aborted before that (permission failure, radio init throw), touching them here
+        // threw UninitializedPropertyAccessException and MASKED the original crash.
+        if (::radio.isInitialized) {
+            try { radio.stop() } catch (e: Exception) { MeshState.logDebug("radio.stop failed: ${e.message}") }
+        }
+        if (::gattPlane.isInitialized) {
+            try { gattPlane.stop() } catch (e: Exception) { MeshState.logDebug("gattPlane.stop failed: ${e.message}") }
+        }
+        if (::wakeLock.isInitialized && wakeLock.isHeld) wakeLock.release()
         MeshState.running.value = false
         MeshState.stats.value = MeshState.stats.value.copy(
             advertising = false,
@@ -474,6 +563,49 @@ class MeshService : LifecycleService() {
         )
         MeshState.logDebug("service stopped")
         super.onDestroy()
+    }
+
+    /** P4: how many epochs of our own frame hashes stay eligible for a reflection receipt.
+     *  Must outlive the relay path (250 ms queue poll + 2 s air time) across a rollover. */
+    private fun ownHashRetentionEpochs(cfg: MeshConfig): UInt =
+        (cfg.messageRepeatEpochs.toUInt() + 1u).coerceAtLeast(2u)
+
+    /** P4: remember a frame we just originated so its relayed echo is recognisable.
+     *  [carriedText] separates a real message from the empty presence frames LOCAL airs
+     *  between sparse re-broadcasts — echoing a presence frame is not a delivery receipt. */
+    private fun rememberOwnFrame(hash: ByteArray, epoch: UInt, cfg: MeshConfig, carriedText: Boolean) {
+        val hex = hash.joinToString("") { "%02x".format(it) }
+        val retain = ownHashRetentionEpochs(cfg)
+        synchronized(ownHashesLock) {
+            ownHashes[hex] = OwnFrame(epoch, carriedText)
+            val iter = ownHashes.entries.iterator()
+            while (iter.hasNext()) {
+                val e = iter.next()
+                if (epoch >= e.value.epoch && epoch - e.value.epoch > retain) {
+                    iter.remove()
+                    ownHashesAcked.remove(e.key)
+                }
+            }
+            // Belt and braces: bound the map even if epochs run backwards (clock change).
+            while (ownHashes.size > 16) {
+                val oldest = ownHashes.keys.first()
+                ownHashes.remove(oldest)
+                ownHashesAcked.remove(oldest)
+            }
+        }
+    }
+
+    /**
+     * P4: claim [hash] as the echo of one of our own recent originations, at most once per
+     * origination. Returns null when it is not ours; otherwise the remembered frame, whose
+     * [OwnFrame.carriedText] says whether a delivery receipt is warranted.
+     */
+    private fun claimOwnEcho(hash: ByteArray): OwnFrame? {
+        val hex = hash.joinToString("") { "%02x".format(it) }
+        synchronized(ownHashesLock) {
+            val own = ownHashes[hex] ?: return null
+            return if (ownHashesAcked.add(hex)) own else null
+        }
     }
 
     /** B8: enqueue a relay task with tier priority, evicting the lowest-priority queued
@@ -501,7 +633,10 @@ class MeshService : LifecycleService() {
      * signs that completed sketch with witness seed N-1, and we must try both.
      *
      * Returns 0 = Valid, 1 = CellMismatch (witness MAC valid but sketches disjoint —
-     * an honestly remote cell), 2 = Stale (bad MAC / unverifiable).
+     * an honestly remote cell), 2 = Stale (bad MAC / unverifiable),
+     * [POCP_NO_LOCAL_SKETCH] = we hold no sketch for any candidate bucket, so no verdict is
+     * possible. That last case is NOT a judgement about the frame: it means we have not yet
+     * heard anything in those epochs. Callers must not cache it as a decision.
      */
     private fun verifyPocpAcrossRollover(
         frameEp: UInt,
@@ -511,21 +646,31 @@ class MeshService : LifecycleService() {
         cfg: MeshConfig
     ): Int {
         var macValid = false
-        val sketchCur = MeshState.measurement.localSketch(frameEp, seed, cfg.rssiFloorDbm)
-        if (sketchCur.isNotEmpty()) {
-            val v = pocpVerifyWitnessLocal(sketchCur, divSketch, frameEp, prefix, wit, cfg.tauThreshold).toInt()
+        var judged = false
+        // Candidate buckets: the frame's own epoch, the previous one (marks rotate, so a
+        // sketch signed at a rollover only matches the N-1 bucket), and the NEXT one — which
+        // covers a receiver running one epoch BEHIND the sender. Sketches are bucketed by the
+        // frame's own epoch field, so PoCP is more skew-sensitive than the ±2-epoch K4 gate:
+        // without the +1 bucket a receiver with a slow clock silently CellMismatched
+        // everything from a faster peer.
+        val candidates = buildList {
+            add(frameEp)
+            if (frameEp > 0u) add(frameEp - 1u)
+            add(frameEp + 1u)
+        }
+        for (ep in candidates) {
+            val sketch = MeshState.measurement.localSketch(ep, seed, cfg.rssiFloorDbm)
+            if (sketch.isEmpty()) continue
+            judged = true
+            val v = pocpVerifyWitnessLocal(sketch, divSketch, ep, prefix, wit, cfg.tauThreshold).toInt()
             if (v == 0) return 0
             if (v == 1) macValid = true
         }
-        if (frameEp > 0u) {
-            val sketchPrev = MeshState.measurement.localSketch(frameEp - 1u, seed, cfg.rssiFloorDbm)
-            if (sketchPrev.isNotEmpty()) {
-                val v = pocpVerifyWitnessLocal(sketchPrev, divSketch, frameEp - 1u, prefix, wit, cfg.tauThreshold).toInt()
-                if (v == 0) return 0
-                if (v == 1) macValid = true
-            }
+        return when {
+            macValid -> 1
+            judged -> 2
+            else -> POCP_NO_LOCAL_SKETCH
         }
-        return if (macValid) 1 else 2
     }
 
     /**
@@ -536,7 +681,21 @@ class MeshService : LifecycleService() {
      *     in Rust core, which returns false for any length != 226).
      *   - No frame bytes are parsed in Kotlin; all interpretation is done by Rust core functions.
      */
+    /**
+     * Crash barrier. ingestFrame runs on BLE binder threads and on the GATT callback thread;
+     * an exception anywhere inside it (FFI edge case, encrypted-prefs I/O, OOM on a malformed
+     * frame) propagated straight to the default uncaught handler and killed the process. One
+     * bad frame from any nearby device could take the app down.
+     */
     private fun ingestFrame(bytes: ByteArray, rssi: Int) {
+        try {
+            ingestFrameInner(bytes, rssi)
+        } catch (e: Throwable) {
+            MeshState.logDebug("ingestFrame failed (frame dropped): ${e::class.java.simpleName}: ${e.message}")
+        }
+    }
+
+    private fun ingestFrameInner(bytes: ByteArray, rssi: Int) {
         val cfg = MeshState.config
         val nowMs = System.currentTimeMillis()
         val ownEpoch = (nowMs / cfg.epochMs).toUInt()
@@ -558,6 +717,14 @@ class MeshService : LifecycleService() {
                     "epoch skew: frame=$frameEp own=$ownEpoch (check epochMs match + clocks)"
                 )
             }
+            // Surface it: a skewed peer is invisible, and silence is indistinguishable from
+            // "nobody is around". diff is in epochs; report it in seconds, which is what the
+            // user can actually act on.
+            val offBySec = diff * cfg.epochMs / 1000L
+            MeshState.clockSkewWarning.value =
+                "⚠ A NEARBY PHONE'S CLOCK IS ${kotlin.math.abs(offBySec)}s " +
+                    (if (offBySec > 0) "AHEAD" else "BEHIND") +
+                    " — ITS MESSAGES ARE BEING DROPPED. SYNC BOTH CLOCKS."
             return
         }
 
@@ -571,20 +738,26 @@ class MeshService : LifecycleService() {
         // the next epoch boundary (its TTL does the propagating, not our re-origination).
         // Our hash went into dedup at origination, so this check must run BEFORE the dedup
         // gate. TTL sits outside the hashed region, so the relayed echo hashes identically.
-        val ownHash = ownFrameHash
-        if (ownHash != null && hash.contentEquals(ownHash)) {
-            ownFrameHash = null // react once per origination
-            reflectionHeard = true
-            if (MeshState.outgoingText.value.isNotEmpty()) {
+        val ownEcho = claimOwnEcho(hash)
+        if (ownEcho != null) {
+            // Only a frame that actually carried the user's text is a delivery signal. LOCAL
+            // airs empty presence frames between sparse re-broadcasts; echoing one of those
+            // is liveness, not receipt.
+            val textEcho = ownEcho.carriedText && MeshState.outgoingText.value.isNotEmpty()
+            if (textEcho) reflectionHeard = true
+            MeshState.logDebug(
+                "own echo heard (epoch=${ownEcho.epoch} text=${ownEcho.carriedText}) — a peer relayed us"
+            )
+            if (textEcho) {
                 MeshState.receipt.value =
                     "✓ heard back once — a peer relayed it (not proof of delivery)"
-            }
-            if (MeshState.outgoingTier.value != SendTier.LOCAL) {
-                val repeat = cfg.messageRepeatEpochs.toLong()
-                if (repeat > 0 && MeshState.outgoingText.value.isNotEmpty()) {
-                    MeshState.outgoingSetAtEpoch =
-                        (ownEpoch.toLong() + 1L - repeat).coerceAtLeast(0L).toUInt()
-                    MeshState.logDebug("reflection heard: mesh is carrying our broadcast; stopping re-origination")
+                if (MeshState.outgoingTier.value != SendTier.LOCAL) {
+                    val repeat = cfg.messageRepeatEpochs.toLong()
+                    if (repeat > 0) {
+                        MeshState.outgoingSetAtEpoch =
+                            (ownEpoch.toLong() + 1L - repeat).coerceAtLeast(0L).toUInt()
+                        MeshState.logDebug("reflection heard: mesh is carrying our broadcast; stopping re-origination")
+                    }
                 }
             }
         }
@@ -607,7 +780,36 @@ class MeshService : LifecycleService() {
         }
         if (direct) MeshState.measurement.recordPresence(mark, frameEp)
 
-        if (!dedup.checkAndInsertEpoch(hash, frameEp)) return
+        // Admission check only — the INSERT happens at the end, once we have actually acted
+        // on this frame. Inserting here meant a frame that transiently failed verification
+        // (empty local sketch at the start of an epoch, contacts not yet loaded) was stuck in
+        // the seen-set for the whole ~3-epoch window: every retransmission of those exact
+        // bytes was dropped here, so the loss could never self-heal.
+        when (dedup.checkEpoch(hash, frameEp)) {
+            FfiDedupVerdict.FRESH -> Unit
+            FfiDedupVerdict.DUPLICATE -> return
+            FfiDedupVerdict.BUCKET_FULL -> {
+                // C8 anti-eviction sub-cap hit. This is NOT a duplicate: a fresh, validly
+                // signed frame is being refused, and while it lasts nothing stamped with this
+                // epoch is displayed, relayed, or measured. 1024 signed frames is cheap to
+                // produce, so treat a sustained occurrence as a jamming signal.
+                if (lastBucketFullEpoch != frameEp) {
+                    lastBucketFullEpoch = frameEp
+                    MeshState.logDebug(
+                        "dedup bucket for epoch $frameEp is FULL — further frames stamped with " +
+                            "this epoch are being refused (not displayed, not relayed); possible flood"
+                    )
+                }
+                return
+            }
+        }
+
+        // A frame inside the freshness window means at least one peer's clock agrees with
+        // ours; the skew banner is no longer accurate.
+        if (MeshState.clockSkewWarning.value != null) {
+            MeshState.clockSkewWarning.value = null
+            lastSkewPair = null
+        }
 
         // Log first frame heard each epoch
         if (firstFrameEpoch != ownEpoch) {
@@ -627,7 +829,13 @@ class MeshService : LifecycleService() {
         // E3: iterate ALL contacts unconditionally (no early break) — the NUMBER of decrypt
         // calls must not leak which contact index matched (timing side-channel).
         if (wp != null && wp.msgType.toInt() == 3) {
-            if (!vdlCheckFrame(bytes)) return // invalid PoW: drop, do not relay
+            if (!vdlCheckFrame(bytes)) {
+                MeshState.logDebug("drop: private frame failed VDL proof-of-work check")
+                // A bad PoW is a permanent property of these bytes — mark seen so a flood of
+                // copies is rejected at the cheap gate instead of re-running the check.
+                dedup.insertEpoch(hash, frameEp)
+                return // invalid PoW: drop, do not relay
+            }
             var privatePlaintext: String? = null
             var privateLabel: String? = null
             for (contact in PairStore.contacts(this)) {
@@ -642,8 +850,18 @@ class MeshService : LifecycleService() {
                 }
             }
             if (privatePlaintext != null) {
-                // A3: persist any fast-forwarded chain state (past keys deleted).
-                PairStore.noteOpened(this, privateLabel!!, frameEp)
+                // A3: persist any fast-forwarded chain state (past keys deleted). This does a
+                // synchronous commit() to EncryptedSharedPreferences, so it must not run on
+                // the BLE binder thread that delivered this frame — disk I/O there stalls
+                // scan callback delivery for every other frame in flight.
+                val label = privateLabel!!
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        PairStore.noteOpened(this@MeshService, label, frameEp)
+                    } catch (e: Exception) {
+                        MeshState.logDebug("noteOpened failed for '$label': ${e.message}")
+                    }
+                }
                 MeshState.appendMessage(
                     MsgRow(
                         tsMs = System.currentTimeMillis(),
@@ -653,12 +871,15 @@ class MeshService : LifecycleService() {
                         text = privatePlaintext,
                         mine = false,
                         tier = SendTier.PRIVATE,
-                        direct = direct
+                        direct = direct,
+                        contactLabel = privateLabel
                     )
                 )
             }
             // Relay regardless of whether we could decrypt (multi-hop delivery).
             relayFrame(bytes)?.let { enqueueRelay(it, 3) }
+            // Acted on: relayed, and decrypted if it was for us. Safe to mark seen.
+            dedup.insertEpoch(hash, frameEp)
             return
         }
 
@@ -678,6 +899,7 @@ class MeshService : LifecycleService() {
         //               dissimilar claims — the old distinct≥2 display lock was security theater).
         var displayOk = false
         var relayOnly = false
+        var unjudged = false
         var corroborations = 0u
         if (wp != null) {
             val msgType = wp.msgType.toInt()
@@ -685,11 +907,45 @@ class MeshService : LifecycleService() {
                 wp.divSketch.any { it != 0.toByte() }
             if (!hasWitness) {
                 relayOnly = true // A1: relay-only, never display
+                // Every "the other phone relayed it but never showed it" report lands here.
+                // An up-to-date peer never originates witnessless, so this now means the
+                // sender is running an older build or genuinely had no cell to attest to.
+                MeshState.logDebug(
+                    "relay-only: frame from ${mark.joinToString("") { "%02x".format(it) }.take(8)} " +
+                        "carries NO PoCP witness — relayed but not displayed (sender heard nobody?)"
+                )
             } else {
                 when (val verdict = verifyPocpAcrossRollover(wp.epoch, wp.divSketch, wp.framePrefix, wp.pocpWit, cfg)) {
                     0 -> displayOk = true // Valid: co-present with our cell
-                    1 -> if (msgType == 2) displayOk = true // honest remote-cell broadcast
-                    // else: Stale MAC, or CellMismatch on LOCAL — no display, no relay
+                    1 -> {
+                        if (msgType == 2) {
+                            displayOk = true // honest remote-cell broadcast
+                        } else {
+                            // LOCAL from a cell that doesn't overlap ours: dropped entirely.
+                            MeshState.logDebug(
+                                "drop LOCAL: PoCP CellMismatch (jaccard < tau=${cfg.tauThreshold}) — " +
+                                    "our epoch-$frameEp sketch has " +
+                                    "${MeshState.measurement.localSketch(frameEp, seed, cfg.rssiFloorDbm).size} slots"
+                            )
+                        }
+                    }
+                    POCP_NO_LOCAL_SKETCH -> {
+                        // We hold no sketch for any candidate bucket, so this is not a
+                        // judgement about the frame — we simply have not heard anything yet.
+                        // Leave it out of the seen-set so a re-air can still be displayed.
+                        unjudged = true
+                        MeshState.logDebug(
+                            "defer: no local sketch for epochs ${frameEp - 1u}..${frameEp + 1u} — " +
+                                "cannot judge this frame yet, leaving it eligible for retry"
+                        )
+                    }
+                    else -> {
+                        // Stale: the witness MAC did not verify against any sketch bucket.
+                        MeshState.logDebug(
+                            "drop: PoCP verdict=$verdict (stale/unverifiable witness) type=$msgType " +
+                                "frameEpoch=$frameEp ownEpoch=$ownEpoch — no display, no relay"
+                        )
+                    }
                 }
 
                 // R1: soft detection of div_sketch reuse across distinct marks (copy signal).
@@ -724,6 +980,13 @@ class MeshService : LifecycleService() {
             relayFrame(bytes)?.let { enqueueRelay(it, wp?.msgType?.toInt() ?: 2) }
         }
 
+        // Mark seen only now, and only if we reached an actual decision. A frame we could
+        // not judge (no local sketch for any candidate epoch) stays out of the seen-set so a
+        // re-air moments later — once we have heard someone — can still be displayed.
+        // Inserting before the decision meant one transient failure suppressed those exact
+        // bytes for the whole ~3-epoch dedup window and the loss never self-healed.
+        if (!unjudged) dedup.insertEpoch(hash, frameEp)
+
         // Display only when verified and not relay-only.
         if (displayOk) {
             val text = frameBodyText(bytes)
@@ -749,6 +1012,12 @@ class MeshService : LifecycleService() {
                 }
                 if (!suppress) {
                     val tier = if (wp?.msgType?.toInt() == 1) SendTier.LOCAL else SendTier.BROADCAST
+                    // How much evidence the co-presence check actually had. A verified
+                    // witness against a 2-3 mark cell is cheaply forgeable by someone who
+                    // was never there (see the pocp module header), so the UI must not
+                    // present it as proof.
+                    val cellSize = MeshState.measurement
+                        .localSketch(frameEp, seed, MeshState.config.rssiFloorDbm).size
                     MeshState.appendMessage(
                         MsgRow(
                             tsMs = System.currentTimeMillis(),
@@ -759,7 +1028,8 @@ class MeshService : LifecycleService() {
                             mine = false,
                             tier = tier,
                             direct = direct,
-                            corroborations = corroborations.toInt()
+                            corroborations = corroborations.toInt(),
+                            lowConfidenceCell = cellSize < MIN_TRUSTWORTHY_CELL
                         )
                     )
                 }
@@ -789,36 +1059,69 @@ class MeshService : LifecycleService() {
         // TTL from the Rust core (invariant #1): local = 1 (relayable once so the
         // reflection receipt can come back), regional/private = 8.
         val ttl: UByte = if (localImmediate) defaultTtlLocal().toUByte() else defaultTtlRegional().toUByte()
-        // A1/C2: sign the current epoch's sketch; at rollover — when nothing has been heard
-        // yet this epoch — sign the PREVIOUS epoch's completed sketch with witness seed
-        // epoch-1 (receivers accept both). Only when neither epoch heard a single mark do
-        // we originate witnessless (relay-only at receivers — a device that hears nobody
-        // has nobody to display to, so nothing is lost).
-        val sketchCur = MeshState.measurement.localSketch(epoch, seed, cfg.rssiFloorDbm)
-        val sketchPrev = if (sketchCur.isEmpty()) {
-            MeshState.measurement.localSketch(epoch - 1u, seed, cfg.rssiFloorDbm)
-        } else {
-            emptyList()
+        // P2/P3/P5: register OUR OWN mark for this epoch before building the sketch. The mark
+        // is a pure function of (seed, beaconSeed), so the unwitnessed frame built here has
+        // the same mark as the witnessed frame built below — we build it once to read the
+        // mark out, and reuse it as the fallback if witnessed construction fails.
+        //
+        // Why this matters: a cell is "the devices in RF range of each other, INCLUDING me".
+        // Without self-inclusion a phone that had heard nobody yet produced an EMPTY sketch
+        // and originated a WITNESSLESS frame, which every receiver relays but never displays
+        // (the relayOnly branch in ingestFrame) — while the originator still heard its own
+        // relayed echo and printed a delivery receipt. Blank screen on one phone, "heard
+        // back once" on the other. Self-inclusion also fixes the two-device case: A held
+        // {mark_B} and B held {mark_A}, which are disjoint, so LOCAL could never display.
+        val baseFrame = makeMessageFrame(seed, epoch, beaconSeed, localImmediate, effectiveText)
+        if (baseFrame != null) {
+            frameMark(baseFrame)?.let { MeshState.measurement.recordSelf(it, epoch) }
         }
-        val (sketch, witEpoch) = when {
-            sketchCur.isNotEmpty() -> sketchCur to epoch
-            sketchPrev.isNotEmpty() -> sketchPrev to (epoch - 1u)
-            else -> sketchCur to epoch
+
+        // A1/C2: sign whichever cell view is RICHER — the current epoch's bucket or the
+        // previous epoch's completed one (receivers try both, plus epoch+1, so either
+        // verifies).
+        //
+        // This used to key off "is the current sketch empty", which worked only because a
+        // freshly rolled-over bucket WAS empty. Now that our own mark is always in it, the
+        // current bucket is never empty, so that test would always pick it — and immediately
+        // after a rollover it holds nothing but our own mark. A receiver in a crowd has a
+        // fuller bucket, so a one-element claim scores 1/N and falls under tau: honest frames
+        // would CellMismatch for the first moments of every epoch, worse the denser the crowd.
+        // Comparing sizes keeps the original rollover intent and the self-inclusion guarantee.
+        val sketchCur = MeshState.measurement.localSketch(epoch, seed, cfg.rssiFloorDbm)
+        val sketchPrev = MeshState.measurement.localSketch(epoch - 1u, seed, cfg.rssiFloorDbm)
+        val (sketch, witEpoch) = if (sketchPrev.size > sketchCur.size) {
+            sketchPrev to (epoch - 1u)
+        } else {
+            sketchCur to epoch
         }
         val divSketch = if (sketch.isNotEmpty()) pocpSketchToDivSketch(sketch) else null
-        val frame = if (divSketch != null) {
-            makeMessageFrameWithWitness(seed, epoch, beaconSeed, localImmediate, effectiveText, ttl, divSketch, witEpoch)
-        } else {
-            makeMessageFrame(seed, epoch, beaconSeed, localImmediate, effectiveText)
+        if (divSketch == null) {
+            // Unreachable once recordSelf has run for this epoch — a self-inclusive sketch
+            // is never empty. Loud, because the resulting frame is relay-only at receivers.
+            MeshState.logDebug(
+                "WITNESSLESS origination epoch=$epoch (own mark missing) — receivers will " +
+                    "relay this frame but NOT display it"
+            )
         }
+        val frame = (
+            if (divSketch != null) {
+                makeMessageFrameWithWitness(
+                    seed, epoch, beaconSeed, localImmediate, effectiveText, ttl, divSketch, witEpoch
+                )
+            } else {
+                null
+            }
+            ) ?: baseFrame
         if (frame != null) {
             currentPublicFrame = frame
             // Insert our own frame's hash into dedup: a relayed copy of our frame comes back
             // with TTL decremented, but TTL sits in the hop-mutable region excluded from the
             // frame hash — so the echo has OUR hash and dedup drops it instead of showing our
             // own message as incoming.
-            ownFrameHash = frameHash(frame)
-            ownFrameHash?.let { dedup.checkAndInsertEpoch(it, epoch) }
+            frameHash(frame)?.let {
+                rememberOwnFrame(it, epoch, cfg, carriedText = effectiveText.isNotEmpty())
+                dedup.checkAndInsertEpoch(it, epoch)
+            }
             if (!privateTransportActive) {
                 // Full stop+start every epoch — see BleRadio note on setAdvertisingData.
                 radio.startAdvertising(frame, cfg.codedPhy, cfg.advIntervalMs)
@@ -844,6 +1147,14 @@ class MeshService : LifecycleService() {
         wiped = true
         MeshState.logDebug("!!! PANIC WIPE initiated")
         try {
+            // Radio FIRST, before anything is zeroed. radio.stop() also cancels a pending
+            // private-window restore; if that runnable were still armed while we zeroed the
+            // frames below, it would put 226 zero bytes of mesh service data back on air
+            // after the wipe. Silencing the transmitter is the part an RF observer can see,
+            // so it must not wait behind key zeroization.
+            if (::radio.isInitialized) radio.stop()
+            if (::gattPlane.isInitialized) gattPlane.stop()
+
             // Clear Rust in-memory state (the flag was already set; we call the function).
             panicWipe()
             // C7: zero the live beacon seed too — previously it stayed in Rust memory,
@@ -877,9 +1188,7 @@ class MeshService : LifecycleService() {
                 localImmediateMarks.clear()
             }
 
-            // Stop radio and GATT.
-            radio.stop()
-            gattPlane.stop()
+            // Radio/GATT were already stopped at the top of the wipe.
 
             // Remove foreground notification and stop the service.
             stopForeground(STOP_FOREGROUND_REMOVE)

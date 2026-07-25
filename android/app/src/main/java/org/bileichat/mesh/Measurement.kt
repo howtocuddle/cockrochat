@@ -1,4 +1,4 @@
-package org.cockroachat.mesh
+package org.bileichat.mesh
 
 import org.json.JSONArray
 import org.json.JSONObject
@@ -29,9 +29,22 @@ class Measurement {
     // device two hops away is not "nearby".
     private val directMarks = ConcurrentHashMap<UInt, MutableSet<String>>()
 
+    // P2/P5: this device's OWN mark for each epoch it advertised in. A cell is "the devices
+    // in RF range of each other, INCLUDING me" — excluding self made two mutual neighbours
+    // hold disjoint sketches (A held {mark_B}, B held {mark_A}), which is Jaccard 0.0 and a
+    // guaranteed CellMismatch. It also let a phone that had heard nobody yet build an EMPTY
+    // sketch and originate a witnessless frame, which every receiver relays but never shows.
+    // Kept in its own map (not routed through record()) so totalHeard() and exportJson stay
+    // honest about what was actually heard over the air.
+    private val selfMarks = ConcurrentHashMap<UInt, String>()
+
     private companion object {
         const val MAX_ROWS = 4000
         const val MAX_EPOCHS = 32
+
+        /** RSSI attributed to our own mark. RSSI_FLOOR_RANGE is entirely negative, so 0
+         *  always clears the configured floor — our own presence is never RSSI-filtered. */
+        const val SELF_RSSI = 0
     }
 
     fun record(mark: ByteArray, rssi: Int, epoch: UInt) {
@@ -61,6 +74,21 @@ class Measurement {
         }
     }
 
+    /**
+     * Record THIS device's own mark for [epoch]. Called from the frame-origination path once
+     * per epoch, before the local sketch is built. See [selfMarks] for why this exists.
+     */
+    fun recordSelf(mark: ByteArray, epoch: UInt) {
+        selfMarks[epoch] = mark.joinToString("") { "%02x".format(it) }
+        if (selfMarks.size > MAX_EPOCHS) {
+            selfMarks.keys.minOrNull()?.let { selfMarks.remove(it) }
+        }
+    }
+
+    /** True once [recordSelf] has run for [epoch] — i.e. the sketch for that epoch can
+     *  never be empty, so origination cannot fall back to a witnessless frame. */
+    fun hasSelfMark(epoch: UInt): Boolean = selfMarks.containsKey(epoch)
+
     fun neighborsThisEpoch(epoch: UInt): Int {
         return epochMarks[epoch]?.size ?: 0
     }
@@ -87,14 +115,24 @@ class Measurement {
     fun localSketch(epoch: UInt, seed: ByteArray, floorDbm: Int): List<ULong> {
         // Collect rows for this epoch
         val epochRows = synchronized(rowsLock) { rows.filter { it.epoch == epoch } }
-        if (epochRows.isEmpty()) return emptyList()
 
-        val marksFlat = epochRows.flatMap { row ->
+        // Our own mark joins the cell (see [selfMarks]). Deduped against heard rows: a
+        // relayed copy of our own frame could otherwise put our mark in twice, and KMV
+        // slots are scarce (16).
+        val selfHex = selfMarks[epoch]
+        val heardHex = epochRows.map { it.markHex }
+        val includeSelf = selfHex != null && selfHex !in heardHex
+        if (epochRows.isEmpty() && !includeSelf) return emptyList()
+
+        val markHexes = if (includeSelf) heardHex + selfHex!! else heardHex
+        val marksFlat = markHexes.flatMap { hex ->
             // decode hex back to 16 bytes
-            (row.markHex.chunked(2).map { it.toInt(16).toByte() })
+            (hex.chunked(2).map { it.toInt(16).toByte() })
         }.toByteArray()
 
-        val rssiList: List<Byte> = epochRows.map { it.rssi.toByte() }
+        val rssiList: List<Byte> =
+            epochRows.map { it.rssi.toByte() } +
+                (if (includeSelf) listOf(SELF_RSSI.toByte()) else emptyList())
 
         // The KMV seed MUST be a value all co-located devices agree on, so the SAME overheard mark
         // hashes to the SAME u64 on every phone — otherwise Jaccard is meaningless. The epoch is that
@@ -141,5 +179,6 @@ class Measurement {
         synchronized(rowsLock) { rows.clear() }
         epochMarks.clear()
         directMarks.clear()
+        selfMarks.clear()
     }
 }

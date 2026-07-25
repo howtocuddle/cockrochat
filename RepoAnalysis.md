@@ -35,7 +35,7 @@ I'll audit this repo thoroughly. Let me start by understanding the codebase stru
 **Input:**
 ```json
 {
-  "command": "ls -la /home/Likun/projects/cockroachat"
+  "command": "ls -la /home/Likun/projects/bileichat"
 }
 ```
 
@@ -47,15 +47,15 @@ drwxr-xr-x 9 Likun Likun      162 Jul 25 00:38 ..
 drwxr-xr-x 5 Likun Likun      171 Jul 24 02:45 android
 -rw-r--r-- 1 Likun Likun      658 Jul 24 02:45 api.qrserver.png
 -rw-r--r-- 1 Likun Likun    18372 Jul 24 02:44 Claude_Chat_1784792696492.md
-drwxr-xr-x 6 Likun Likun     4096 Jul 24 14:31 cockroachat
--rw-r--r-- 1 Likun Likun 16604666 Jul 24 14:31 cockroachat-0.5-unified.apk
--rw-r--r-- 1 Likun Likun 16604666 Jul 24 14:31 cockroachat-debug.apk
--rw-r--r-- 1 Likun Likun  9334272 Jul 24 02:20 cockroachat-live-0.3-fullrestart.apk
--rw-r--r-- 1 Likun Likun  9335480 Jul 24 13:55 cockroachat-live-0.4-localreceipt.apk
--rw-r--r-- 1 Likun Likun  9335480 Jul 24 13:55 cockroachat-live-debug.apk
--rw-r--r-- 1 Likun Likun  9334272 Jul 24 02:20 cockroachat-rig-0.3-fullrestart.apk
--rw-r--r-- 1 Likun Likun  9335476 Jul 24 13:55 cockroachat-rig-0.4-localreceipt.apk
--rw-r--r-- 1 Likun Likun  9335476 Jul 24 13:55 cockroachat-rig-debug.apk
+drwxr-xr-x 6 Likun Likun     4096 Jul 24 14:31 bileichat
+-rw-r--r-- 1 Likun Likun 16604666 Jul 24 14:31 bileichat-0.5-unified.apk
+-rw-r--r-- 1 Likun Likun 16604666 Jul 24 14:31 bileichat-debug.apk
+-rw-r--r-- 1 Likun Likun  9334272 Jul 24 02:20 bileichat-live-0.3-fullrestart.apk
+-rw-r--r-- 1 Likun Likun  9335480 Jul 24 13:55 bileichat-live-0.4-localreceipt.apk
+-rw-r--r-- 1 Likun Likun  9335480 Jul 24 13:55 bileichat-live-debug.apk
+-rw-r--r-- 1 Likun Likun  9334272 Jul 24 02:20 bileichat-rig-0.3-fullrestart.apk
+-rw-r--r-- 1 Likun Likun  9335476 Jul 24 13:55 bileichat-rig-0.4-localreceipt.apk
+-rw-r--r-- 1 Likun Likun  9335476 Jul 24 13:55 bileichat-rig-debug.apk
 -rw-r--r-- 1 Likun Likun     2824 Jul 24 03:22 CONTRIBUTING.md
 drwxr-xr-x 7 Likun Likun     4096 Jul 25 00:32 .git
 -rw-r--r-- 1 Likun Likun      526 Jul 24 03:18 .gitignore
@@ -78,18 +78,18 @@ drwxr-xr-x 7 Likun Likun      108 Jul 24 02:45 mesh-core
 
 **Output:**
 ```
-/home/Likun/projects/cockroachat/cockroachat/session-ses_0718.md
-/home/Likun/projects/cockroachat/cockroachat/README.md
-/home/Likun/projects/cockroachat/cockroachat/laptop/README.md
-/home/Likun/projects/cockroachat/Claude_Chat_1784792696492.md
-/home/Likun/projects/cockroachat/session-ses_0769.md
-/home/Likun/projects/cockroachat/session-ses_0718.md
-/home/Likun/projects/cockroachat/README.md
-/home/Likun/projects/cockroachat/CONTRIBUTING.md
-/home/Likun/projects/cockroachat/cockroachat/Claude_Chat_1784792696492.md
-/home/Likun/projects/cockroachat/cockroachat/session-ses_0769.md
-/home/Likun/projects/cockroachat/cockroachat/CONTRIBUTING.md
-/home/Likun/projects/cockroachat/laptop/README.md
+/home/Likun/projects/bileichat/bileichat/session-ses_0718.md
+/home/Likun/projects/bileichat/bileichat/README.md
+/home/Likun/projects/bileichat/bileichat/laptop/README.md
+/home/Likun/projects/bileichat/Claude_Chat_1784792696492.md
+/home/Likun/projects/bileichat/session-ses_0769.md
+/home/Likun/projects/bileichat/session-ses_0718.md
+/home/Likun/projects/bileichat/README.md
+/home/Likun/projects/bileichat/CONTRIBUTING.md
+/home/Likun/projects/bileichat/bileichat/Claude_Chat_1784792696492.md
+/home/Likun/projects/bileichat/bileichat/session-ses_0769.md
+/home/Likun/projects/bileichat/bileichat/CONTRIBUTING.md
+/home/Likun/projects/bileichat/laptop/README.md
 ```
 
 ---
@@ -98,23 +98,23 @@ drwxr-xr-x 7 Likun Likun      108 Jul 24 02:45 mesh-core
 
 _Thinking:_
 
-Let me look at the main directories - mesh-core, android, laptop, cockroachat. Let me read the README first and explore the structure.
+Let me look at the main directories - mesh-core, android, laptop, bileichat. Let me read the README first and explore the structure.
 
 **Tool: read**
 
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/README.md"
+  "filePath": "/home/Likun/projects/bileichat/README.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/README.md</path>
+<path>/home/Likun/projects/bileichat/README.md</path>
 <type>file</type>
 <content>
-1: # cockroachat
+1: # bileichat
 2: 
 3: **Offline Decentralized Mesh Messaging for Protests & Emergencies**
 4: 
@@ -127,11 +127,11 @@ Let me look at the main directories - mesh-core, android, laptop, cockroachat. L
 11: 
 12: ---
 13: 
-14: ## What is cockroachat?
+14: ## What is bileichat?
 15: 
 16: During protests, civil demonstrations, or natural disasters, cellular networks and Wi-Fi are frequently jammed, monitored, or shut down. 
 17: 
-18: **cockroachat** turns nearby smartphones into a resilient, self-healing peer-to-peer mesh network. Devices pass short emergency alerts phone-to-phone through the crowd automatically.
+18: **bileichat** turns nearby smartphones into a resilient, self-healing peer-to-peer mesh network. Devices pass short emergency alerts phone-to-phone through the crowd automatically.
 19: 
 20: ### Key Highlights
 21: - **100% Offline & Serverless**: Works entirely over Bluetooth Low Energy (BLE 5.0).
@@ -249,7 +249,7 @@ Let me look at the main directories - mesh-core, android, laptop, cockroachat. L
 133: ```bash
 134: # Clone the repository
 135: git clone https://github.com/howtocuddle/cockrochat.git
-136: cd cockroachat/mesh-core
+136: cd bileichat/mesh-core
 137: 
 138: # Run test suite (cryptographic vectors, codec safety, property tests)
 139: cargo test
@@ -266,7 +266,7 @@ Let me look at the main directories - mesh-core, android, laptop, cockroachat. L
 150: 
 151: ## Technical Glossary
 152: 
-153: This glossary explains technical terms and protocol concepts used throughout `cockroachat`.
+153: This glossary explains technical terms and protocol concepts used throughout `bileichat`.
 154: 
 155: ### Cryptography & Security Terms
 156: 
@@ -284,7 +284,7 @@ Let me look at the main directories - mesh-core, android, laptop, cockroachat. L
 168: - **BLE 5.0 Extended Advertising**: A Bluetooth Low Energy standard allowing devices to broadcast larger packets (up to 255 bytes) without requiring Bluetooth pairing.
 169: - **Epoch**: A fixed time window (e.g., 10 seconds in testing, minutes in production) during which devices sample background signals and rotate internal keys.
 170: - **Frame Hash (Dedup Key)**: A unique 16-byte identifier computed from a message's contents, allowing relay nodes to ignore duplicate broadcasts.
-171: - **Jaccard Similarity ($\tau$)**: A mathematical formula measuring set similarity. In `cockroachat`, it determines whether two devices share the same physical radio environment.
+171: - **Jaccard Similarity ($\tau$)**: A mathematical formula measuring set similarity. In `bileichat`, it determines whether two devices share the same physical radio environment.
 172: - **KMV Sketch (K-Minimum Values)**: A compact summary of ambient Bluetooth signals, allowing devices to compare physical surroundings efficiently in memory.
 173: - **LE Coded PHY**: A Bluetooth 5 mode using error correction (S=8) to quadruple radio range, ideal for dense or obstructed crowd environments.
 174: - **Parse-Before-Forward**: The security rule requiring every packet to be fully validated in Rust before being displayed or relayed.
@@ -310,212 +310,212 @@ Let me look at the main directories - mesh-core, android, laptop, cockroachat. L
 **Input:**
 ```json
 {
-  "command": "find /home/Likun/projects/cockroachat/mesh-core /home/Likun/projects/cockroachat/android /home/Likun/projects/cockroachat/laptop /home/Likun/projects/cockroachat/cockroachat -type f -not -path \"*/node_modules/*\" -not -path \"*/.git/*\" -not -path \"*/build/*\" -not -path \"*/.gradle/*\" | head -200"
+  "command": "find /home/Likun/projects/bileichat/mesh-core /home/Likun/projects/bileichat/android /home/Likun/projects/bileichat/laptop /home/Likun/projects/bileichat/bileichat -type f -not -path \"*/node_modules/*\" -not -path \"*/.git/*\" -not -path \"*/build/*\" -not -path \"*/.gradle/*\" | head -200"
 }
 ```
 
 **Output:**
 ```
-/home/Likun/projects/cockroachat/mesh-core/target/release/.cargo-artifact-lock
-/home/Likun/projects/cockroachat/mesh-core/target/release/libmesh_core.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/uniffi-bindgen.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/.cargo-build-lock
-/home/Likun/projects/cockroachat/mesh-core/target/release/.cargo-lock
-/home/Likun/projects/cockroachat/mesh-core/target/release/broadcast-test.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/broadcast-test
-/home/Likun/projects/cockroachat/mesh-core/target/release/libmesh_core.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libproc_macro2-fa6fb46b7b9f26fa.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/liblibc-700ee1c3e5e350ae.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libquote-8f304c54c543cdbc.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libsemver-91104527be7dd393.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libtempfile-1d84b8477ea806f8.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libgetrandom-b6b8c6cfc366fcca.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/librustc_version-1cbc72738b69b761.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libserde_spanned-ba739a9eb288b17d.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libfs_err-b0b81e5ff50737d4.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libtoml-f1ec5d9f63752c35.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcamino-a5530053bf67039c.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libbasic_toml-8e6c7ad3654e7936.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_meta-d8e5cb3720f9b28c.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libzeroize-075c3e03e35d0b96.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libaskama_derive-9ca9285299c668d6.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libzmij-52750fce940b2f6a.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libthiserror-19843f047dc8375b.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libfs_err-d087c19bec51c7a5.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/liblibc-686ad2e43e26abf1.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_core-b49e868b49dadbc1.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libblake3-f22b089c8de9c6b8.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libserde_core-d9b6e8c587c813b7.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/librustix-92494cbff764caa2.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libclap-995409d821a88a45.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libserde_spanned-c0d37446c965e752.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libnom-d87703d6e425c904.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libserde-939dc3550d48bf2a.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libserde-939dc3550d48bf2a.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libserde_core-d9b6e8c587c813b7.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcargo_platform-5540245a8a92c0df.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libweedle-709764a8840af163.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libsha2-dfbfc83e640e7771.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libtoml_datetime-777230580ff2c3af.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_pipeline-3cd965a1d0304294.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libaead-f9bb5bd8de789e55.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcurve25519_dalek-d44caedc2a8adc29.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libchacha20-4f559d03d6a8c02d.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libx25519_dalek-627cfee7ffd84369.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcargo_metadata-4855f1abc7cdb883.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libgoblin-11fb4280ba8dd855.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_bindgen-9cb5d9fab59c9346.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/librustix-818947dfe10686a5.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libtoml-f1ec5d9f63752c35.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libserde-e11ba8c4b28a396c.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_meta-d8e5cb3720f9b28c.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libaskama_parser-ebada7d87bfb86c9.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libzeroize-075c3e03e35d0b96.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libanyhow-fe9e33d2246d2495.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libgetrandom-1a2303ff46fd4dfd.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcurve25519_dalek-d44caedc2a8adc29.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libdigest-ec581377bd0fbf5e.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcamino-30588eb63bc0c0a6.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_pipeline-3cd965a1d0304294.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libsemver-c0a85e7272055c75.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libtoml-d219a700704c749e.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libsha2-dfbfc83e640e7771.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libmesh_core.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libanyhow-cb9707b4f7f29993.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libproc_macro2-fa6fb46b7b9f26fa.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libserde_core-f827e2778313fcb9.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libbasic_toml-8e6c7ad3654e7936.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libaskama_parser-ebada7d87bfb86c9.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libaskama_derive-9ca9285299c668d6.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libanyhow-fe9e33d2246d2495.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libthiserror-19843f047dc8375b.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/liblibc-686ad2e43e26abf1.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_core-b49e868b49dadbc1.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcrypto_common-9de32185b22e4c80.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcrypto_common-9de32185b22e4c80.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libindexmap-158c64044fabd1c6.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libindexmap-158c64044fabd1c6.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniversal_hash-eaaadbff918af54b.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcargo_metadata-4855f1abc7cdb883.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libaead-f9bb5bd8de789e55.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libweedle-709764a8840af163.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libed25519_dalek-5f7ab099c8428a74.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_bindgen-9cb5d9fab59c9346.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libclap-1da3ee89f7f8d7b1.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libaskama-6a267e5b06d80c5f.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/mesh_core.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libed25519-a5d0d4f303316e38.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi-025508b83cd5536b.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libed25519_dalek-e6d7d2cb9bf950db.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libconstant_time_eq-bac7eca0565d6467.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi-2f967609ac6b4f87.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcfg_if-00f80531a3baaf1f.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libunicode_ident-221fb5e8a6ed2b89.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libgetrandom-316211f7dd182c6a.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libzeroize_derive-66a0f11461eef9b7.so
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libtypenum-1f57ce08a3a5a4b5.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libautocfg-50400cceec3529a6.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libblock_buffer-ad58651ed49e6a6c.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcpufeatures-e996441115a8ce3f.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libzmij-52750fce940b2f6a.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libonce_cell-4c569c9e64233469.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libmemchr-c4b3951e554386ce.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcfg_if-cb6a80fc4e3b850d.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/librustc_hash-1cf17d26f09ae783.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libbitflags-4b558b1cc82902ff.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libequivalent-a26f9ae31f44d75a.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/liblibc-700ee1c3e5e350ae.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/liblinux_raw_sys-b8b1c9267d013eaf.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libgetrandom-1a2303ff46fd4dfd.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libdigest-ec581377bd0fbf5e.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcurve25519_dalek_derive-2007b69090ac263c.so
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libglob-819c860fd748d34e.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libchacha20poly1305-391fb0c8eb2f3809.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libsemver-c0a85e7272055c75.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libshlex-1619208bf445e570.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libsmawk-6279a9bb22d68ce2.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libfind_msvc_tools-0796de76ae640b91.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libfind_msvc_tools-0796de76ae640b91.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libscroll-c1628851ad14ba82.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libwinnow-adcc0bfaf3d7a4f7.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libserde_json-0ca0116cf062271f.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libgoblin-11fb4280ba8dd855.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_pipeline-a385b827bde9143a.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcc-7893da84a015bdf6.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcargo_platform-5540245a8a92c0df.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libaskama_macros-e687ccf62299cc68.so
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcurve25519_dalek-f7cd81ecdb0c498b.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libstrsim-586dd54cb3f1d807.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libclap_lex-383186e8d4782efe.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/liblog-a44da20fe1206bf6.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libstrsim-586dd54cb3f1d807.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libtoml_parser-d4146635a4047951.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_udl-262b02897af2572b.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libclap_builder-b3737449ba81f9d2.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libaskama_derive-972fe959657040ce.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libzeroize-cba56eb4b766fff1.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libstatic_assertions-af025567d8b2e4a1.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libzeroize-cba56eb4b766fff1.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libclap_derive-57678e1047d0a5b1.so
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libhybrid_array-df0dd57bde2715aa.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libbitflags-7a3993c84597eb9f.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcfg_if-cb6a80fc4e3b850d.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libsyn-738a378981e84cc5.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libminimal_lexical-76925ae285ae6296.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libheck-fe1b9e852bc45072.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libinout-c179d50fad9092c2.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libserde_spanned-ba739a9eb288b17d.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libcmov-ee602285d6254c61.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_pipeline-8f5c9b1baf9fdaba.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libtoml_writer-a449e2ca13d59110.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libsiphasher-c06da895f003be46.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libanstyle-aba1333063e1164a.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_macros-4cadbf71a9c88603.so
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libsubtle-b4a3afdf9795574d.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libed25519_dalek-e6d7d2cb9bf950db.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libclap_builder-b3737449ba81f9d2.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_bindgen-5f0f76126feecf1b.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/librand_core-9a764ed26afded1b.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/librand_core-e78f7dcc8325f5cc.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libequivalent-32b5525b369d87bf.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libmemchr-aa3ce57daffcc57b.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libindexmap-31fa07a768a2be9d.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libwinnow-9401bfd2f3861844.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libwinnow-9401bfd2f3861844.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/liblinux_raw_sys-b93809c3ceabdd63.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libfastrand-0b5301a2679c4b7f.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libfastrand-0b5301a2679c4b7f.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libitoa-858f62b9ed982f65.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libheck-fe1b9e852bc45072.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libsiphasher-a9709b3a9e8b6edd.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libsyn-738a378981e84cc5.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libctutils-f831584dbdd58b5d.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libtextwrap-7bec6f6fcae2183a.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libtoml_parser-d4146635a4047951.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_meta-4f78d0d0c5311ec7.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libaskama_derive-972fe959657040ce.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libsignature-582c2f87ee5690bd.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libstatic_assertions-af025567d8b2e4a1.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libed25519-a5d0d4f303316e38.rlib
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libarrayvec-a2b68f8d4c21ae6b.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libuniffi_macros-33f1c6591ad09266.so
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/cfg_if-00f80531a3baaf1f.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/unicode_ident-221fb5e8a6ed2b89.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/rand_core-e78f7dcc8325f5cc.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/equivalent-32b5525b369d87bf.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/typenum-1f57ce08a3a5a4b5.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/proc_macro2-fa6fb46b7b9f26fa.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/hashbrown-86451a594333a288.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/memchr-aa3ce57daffcc57b.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/anyhow-cb9707b4f7f29993.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/serde_core-d9b6e8c587c813b7.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/serde_core-f827e2778313fcb9.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libc-686ad2e43e26abf1.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/quote-8f304c54c543cdbc.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libhashbrown-86451a594333a288.rmeta
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/autocfg-50400cceec3529a6.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/winnow-9401bfd2f3861844.d
-/home/Likun/projects/cockroachat/mesh-core/target/release/deps/libtypenum-1f57ce08a3a5a4b5.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/.cargo-artifact-lock
+/home/Likun/projects/bileichat/mesh-core/target/release/libmesh_core.d
+/home/Likun/projects/bileichat/mesh-core/target/release/uniffi-bindgen.d
+/home/Likun/projects/bileichat/mesh-core/target/release/.cargo-build-lock
+/home/Likun/projects/bileichat/mesh-core/target/release/.cargo-lock
+/home/Likun/projects/bileichat/mesh-core/target/release/broadcast-test.d
+/home/Likun/projects/bileichat/mesh-core/target/release/broadcast-test
+/home/Likun/projects/bileichat/mesh-core/target/release/libmesh_core.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libproc_macro2-fa6fb46b7b9f26fa.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/liblibc-700ee1c3e5e350ae.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libquote-8f304c54c543cdbc.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libsemver-91104527be7dd393.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libtempfile-1d84b8477ea806f8.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libgetrandom-b6b8c6cfc366fcca.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/librustc_version-1cbc72738b69b761.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libserde_spanned-ba739a9eb288b17d.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libfs_err-b0b81e5ff50737d4.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libtoml-f1ec5d9f63752c35.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcamino-a5530053bf67039c.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libbasic_toml-8e6c7ad3654e7936.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_meta-d8e5cb3720f9b28c.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libzeroize-075c3e03e35d0b96.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libaskama_derive-9ca9285299c668d6.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libzmij-52750fce940b2f6a.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libthiserror-19843f047dc8375b.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libfs_err-d087c19bec51c7a5.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/liblibc-686ad2e43e26abf1.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_core-b49e868b49dadbc1.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libblake3-f22b089c8de9c6b8.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libserde_core-d9b6e8c587c813b7.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/librustix-92494cbff764caa2.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libclap-995409d821a88a45.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libserde_spanned-c0d37446c965e752.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libnom-d87703d6e425c904.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libserde-939dc3550d48bf2a.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libserde-939dc3550d48bf2a.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libserde_core-d9b6e8c587c813b7.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcargo_platform-5540245a8a92c0df.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libweedle-709764a8840af163.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libsha2-dfbfc83e640e7771.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libtoml_datetime-777230580ff2c3af.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_pipeline-3cd965a1d0304294.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libaead-f9bb5bd8de789e55.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcurve25519_dalek-d44caedc2a8adc29.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libchacha20-4f559d03d6a8c02d.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libx25519_dalek-627cfee7ffd84369.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcargo_metadata-4855f1abc7cdb883.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libgoblin-11fb4280ba8dd855.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_bindgen-9cb5d9fab59c9346.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/librustix-818947dfe10686a5.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libtoml-f1ec5d9f63752c35.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libserde-e11ba8c4b28a396c.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_meta-d8e5cb3720f9b28c.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libaskama_parser-ebada7d87bfb86c9.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libzeroize-075c3e03e35d0b96.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libanyhow-fe9e33d2246d2495.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libgetrandom-1a2303ff46fd4dfd.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcurve25519_dalek-d44caedc2a8adc29.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libdigest-ec581377bd0fbf5e.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcamino-30588eb63bc0c0a6.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_pipeline-3cd965a1d0304294.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libsemver-c0a85e7272055c75.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libtoml-d219a700704c749e.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libsha2-dfbfc83e640e7771.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libmesh_core.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libanyhow-cb9707b4f7f29993.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libproc_macro2-fa6fb46b7b9f26fa.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libserde_core-f827e2778313fcb9.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libbasic_toml-8e6c7ad3654e7936.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libaskama_parser-ebada7d87bfb86c9.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libaskama_derive-9ca9285299c668d6.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libanyhow-fe9e33d2246d2495.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libthiserror-19843f047dc8375b.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/liblibc-686ad2e43e26abf1.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_core-b49e868b49dadbc1.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcrypto_common-9de32185b22e4c80.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcrypto_common-9de32185b22e4c80.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libindexmap-158c64044fabd1c6.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libindexmap-158c64044fabd1c6.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniversal_hash-eaaadbff918af54b.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcargo_metadata-4855f1abc7cdb883.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libaead-f9bb5bd8de789e55.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libweedle-709764a8840af163.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libed25519_dalek-5f7ab099c8428a74.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_bindgen-9cb5d9fab59c9346.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libclap-1da3ee89f7f8d7b1.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libaskama-6a267e5b06d80c5f.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/mesh_core.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libed25519-a5d0d4f303316e38.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi-025508b83cd5536b.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libed25519_dalek-e6d7d2cb9bf950db.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libconstant_time_eq-bac7eca0565d6467.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi-2f967609ac6b4f87.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcfg_if-00f80531a3baaf1f.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libunicode_ident-221fb5e8a6ed2b89.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libgetrandom-316211f7dd182c6a.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libzeroize_derive-66a0f11461eef9b7.so
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libtypenum-1f57ce08a3a5a4b5.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libautocfg-50400cceec3529a6.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libblock_buffer-ad58651ed49e6a6c.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcpufeatures-e996441115a8ce3f.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libzmij-52750fce940b2f6a.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libonce_cell-4c569c9e64233469.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libmemchr-c4b3951e554386ce.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcfg_if-cb6a80fc4e3b850d.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/librustc_hash-1cf17d26f09ae783.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libbitflags-4b558b1cc82902ff.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libequivalent-a26f9ae31f44d75a.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/liblibc-700ee1c3e5e350ae.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/liblinux_raw_sys-b8b1c9267d013eaf.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libgetrandom-1a2303ff46fd4dfd.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libdigest-ec581377bd0fbf5e.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcurve25519_dalek_derive-2007b69090ac263c.so
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libglob-819c860fd748d34e.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libchacha20poly1305-391fb0c8eb2f3809.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libsemver-c0a85e7272055c75.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libshlex-1619208bf445e570.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libsmawk-6279a9bb22d68ce2.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libfind_msvc_tools-0796de76ae640b91.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libfind_msvc_tools-0796de76ae640b91.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libscroll-c1628851ad14ba82.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libwinnow-adcc0bfaf3d7a4f7.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libserde_json-0ca0116cf062271f.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libgoblin-11fb4280ba8dd855.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_pipeline-a385b827bde9143a.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcc-7893da84a015bdf6.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcargo_platform-5540245a8a92c0df.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libaskama_macros-e687ccf62299cc68.so
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcurve25519_dalek-f7cd81ecdb0c498b.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libstrsim-586dd54cb3f1d807.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libclap_lex-383186e8d4782efe.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/liblog-a44da20fe1206bf6.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libstrsim-586dd54cb3f1d807.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libtoml_parser-d4146635a4047951.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_udl-262b02897af2572b.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libclap_builder-b3737449ba81f9d2.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libaskama_derive-972fe959657040ce.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libzeroize-cba56eb4b766fff1.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libstatic_assertions-af025567d8b2e4a1.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libzeroize-cba56eb4b766fff1.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libclap_derive-57678e1047d0a5b1.so
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libhybrid_array-df0dd57bde2715aa.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libbitflags-7a3993c84597eb9f.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcfg_if-cb6a80fc4e3b850d.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libsyn-738a378981e84cc5.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libminimal_lexical-76925ae285ae6296.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libheck-fe1b9e852bc45072.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libinout-c179d50fad9092c2.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libserde_spanned-ba739a9eb288b17d.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libcmov-ee602285d6254c61.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_pipeline-8f5c9b1baf9fdaba.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libtoml_writer-a449e2ca13d59110.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libsiphasher-c06da895f003be46.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libanstyle-aba1333063e1164a.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_macros-4cadbf71a9c88603.so
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libsubtle-b4a3afdf9795574d.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libed25519_dalek-e6d7d2cb9bf950db.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libclap_builder-b3737449ba81f9d2.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_bindgen-5f0f76126feecf1b.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/librand_core-9a764ed26afded1b.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/librand_core-e78f7dcc8325f5cc.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libequivalent-32b5525b369d87bf.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libmemchr-aa3ce57daffcc57b.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libindexmap-31fa07a768a2be9d.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libwinnow-9401bfd2f3861844.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libwinnow-9401bfd2f3861844.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/liblinux_raw_sys-b93809c3ceabdd63.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libfastrand-0b5301a2679c4b7f.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libfastrand-0b5301a2679c4b7f.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libitoa-858f62b9ed982f65.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libheck-fe1b9e852bc45072.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libsiphasher-a9709b3a9e8b6edd.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libsyn-738a378981e84cc5.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libctutils-f831584dbdd58b5d.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libtextwrap-7bec6f6fcae2183a.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libtoml_parser-d4146635a4047951.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_meta-4f78d0d0c5311ec7.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libaskama_derive-972fe959657040ce.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libsignature-582c2f87ee5690bd.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libstatic_assertions-af025567d8b2e4a1.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libed25519-a5d0d4f303316e38.rlib
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libarrayvec-a2b68f8d4c21ae6b.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libuniffi_macros-33f1c6591ad09266.so
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/cfg_if-00f80531a3baaf1f.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/unicode_ident-221fb5e8a6ed2b89.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/rand_core-e78f7dcc8325f5cc.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/equivalent-32b5525b369d87bf.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/typenum-1f57ce08a3a5a4b5.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/proc_macro2-fa6fb46b7b9f26fa.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/hashbrown-86451a594333a288.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/memchr-aa3ce57daffcc57b.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/anyhow-cb9707b4f7f29993.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/serde_core-d9b6e8c587c813b7.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/serde_core-f827e2778313fcb9.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libc-686ad2e43e26abf1.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/quote-8f304c54c543cdbc.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libhashbrown-86451a594333a288.rmeta
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/autocfg-50400cceec3529a6.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/winnow-9401bfd2f3861844.d
+/home/Likun/projects/bileichat/mesh-core/target/release/deps/libtypenum-1f57ce08a3a5a4b5.rmeta
 
 ```
 
@@ -534,58 +534,58 @@ Let me find the actual source files, excluding build artifacts.
 **Input:**
 ```json
 {
-  "command": "find /home/Likun/projects/cockroachat/mesh-core /home/Likun/projects/cockroachat/android /home/Likun/projects/cockroachat/laptop -type f \\( -name \"*.rs\" -o -name \"*.kt\" -o -name \"*.toml\" -o -name \"*.udl\" -o -name \"*.gradle\" -o -name \"*.kts\" -o -name \"*.xml\" \\) -not -path \"*/target/*\" -not -path \"*/build/*\" -not -path \"*/.gradle/*\" | sort"
+  "command": "find /home/Likun/projects/bileichat/mesh-core /home/Likun/projects/bileichat/android /home/Likun/projects/bileichat/laptop -type f \\( -name \"*.rs\" -o -name \"*.kt\" -o -name \"*.toml\" -o -name \"*.udl\" -o -name \"*.gradle\" -o -name \"*.kts\" -o -name \"*.xml\" \\) -not -path \"*/target/*\" -not -path \"*/build/*\" -not -path \"*/.gradle/*\" | sort"
 }
 ```
 
 **Output:**
 ```
-/home/Likun/projects/cockroachat/android/app/build.gradle.kts
-/home/Likun/projects/cockroachat/android/app/src/main/AndroidManifest.xml
-/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/BleRadio.kt
-/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/Config.kt
-/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/GattPlane.kt
-/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MainActivity.kt
-/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/Measurement.kt
-/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MeshApp.kt
-/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MeshService.kt
-/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MeshState.kt
-/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/PairStore.kt
-/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/ui/Drawer.kt
-/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/ui/MeshUi.kt
-/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/ui/Theme.kt
-/home/Likun/projects/cockroachat/android/app/src/main/java/uniffi/mesh_core/mesh_core.kt
-/home/Likun/projects/cockroachat/android/app/src/main/res/drawable/ic_launcher_foreground.xml
-/home/Likun/projects/cockroachat/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
-/home/Likun/projects/cockroachat/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
-/home/Likun/projects/cockroachat/android/app/src/main/res/values/colors.xml
-/home/Likun/projects/cockroachat/android/app/src/main/res/values/strings.xml
-/home/Likun/projects/cockroachat/android/app/src/main/res/values/themes.xml
-/home/Likun/projects/cockroachat/android/build.gradle.kts
-/home/Likun/projects/cockroachat/android/settings.gradle.kts
-/home/Likun/projects/cockroachat/laptop/Cargo.toml
-/home/Likun/projects/cockroachat/laptop/src/main.rs
-/home/Likun/projects/cockroachat/mesh-core/bindings/kotlin/uniffi/mesh_core/mesh_core.kt
-/home/Likun/projects/cockroachat/mesh-core/Cargo.toml
-/home/Likun/projects/cockroachat/mesh-core/fuzz/Cargo.toml
-/home/Likun/projects/cockroachat/mesh-core/fuzz/fuzz_targets/decode.rs
-/home/Likun/projects/cockroachat/mesh-core/src/beacon.rs
-/home/Likun/projects/cockroachat/mesh-core/src/bin/uniffi-bindgen.rs
-/home/Likun/projects/cockroachat/mesh-core/src/codec.rs
-/home/Likun/projects/cockroachat/mesh-core/src/crypto.rs
-/home/Likun/projects/cockroachat/mesh-core/src/ffi.rs
-/home/Likun/projects/cockroachat/mesh-core/src/lib.rs
-/home/Likun/projects/cockroachat/mesh-core/src/message.rs
-/home/Likun/projects/cockroachat/mesh-core/src/pocp.rs
-/home/Likun/projects/cockroachat/mesh-core/src/private.rs
-/home/Likun/projects/cockroachat/mesh-core/src/radio.rs
-/home/Likun/projects/cockroachat/mesh-core/src/statemachine.rs
-/home/Likun/projects/cockroachat/mesh-core/src/store.rs
-/home/Likun/projects/cockroachat/mesh-core/src/trust.rs
-/home/Likun/projects/cockroachat/mesh-core/src/vdl.rs
-/home/Likun/projects/cockroachat/mesh-core/tests/codec_props.rs
-/home/Likun/projects/cockroachat/mesh-core/tests/ffi_roundtrip.rs
-/home/Likun/projects/cockroachat/mesh-core/tests/pocp_props.rs
+/home/Likun/projects/bileichat/android/app/build.gradle.kts
+/home/Likun/projects/bileichat/android/app/src/main/AndroidManifest.xml
+/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/BleRadio.kt
+/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/Config.kt
+/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/GattPlane.kt
+/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MainActivity.kt
+/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/Measurement.kt
+/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MeshApp.kt
+/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MeshService.kt
+/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MeshState.kt
+/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/PairStore.kt
+/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/ui/Drawer.kt
+/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/ui/MeshUi.kt
+/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/ui/Theme.kt
+/home/Likun/projects/bileichat/android/app/src/main/java/uniffi/mesh_core/mesh_core.kt
+/home/Likun/projects/bileichat/android/app/src/main/res/drawable/ic_launcher_foreground.xml
+/home/Likun/projects/bileichat/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+/home/Likun/projects/bileichat/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+/home/Likun/projects/bileichat/android/app/src/main/res/values/colors.xml
+/home/Likun/projects/bileichat/android/app/src/main/res/values/strings.xml
+/home/Likun/projects/bileichat/android/app/src/main/res/values/themes.xml
+/home/Likun/projects/bileichat/android/build.gradle.kts
+/home/Likun/projects/bileichat/android/settings.gradle.kts
+/home/Likun/projects/bileichat/laptop/Cargo.toml
+/home/Likun/projects/bileichat/laptop/src/main.rs
+/home/Likun/projects/bileichat/mesh-core/bindings/kotlin/uniffi/mesh_core/mesh_core.kt
+/home/Likun/projects/bileichat/mesh-core/Cargo.toml
+/home/Likun/projects/bileichat/mesh-core/fuzz/Cargo.toml
+/home/Likun/projects/bileichat/mesh-core/fuzz/fuzz_targets/decode.rs
+/home/Likun/projects/bileichat/mesh-core/src/beacon.rs
+/home/Likun/projects/bileichat/mesh-core/src/bin/uniffi-bindgen.rs
+/home/Likun/projects/bileichat/mesh-core/src/codec.rs
+/home/Likun/projects/bileichat/mesh-core/src/crypto.rs
+/home/Likun/projects/bileichat/mesh-core/src/ffi.rs
+/home/Likun/projects/bileichat/mesh-core/src/lib.rs
+/home/Likun/projects/bileichat/mesh-core/src/message.rs
+/home/Likun/projects/bileichat/mesh-core/src/pocp.rs
+/home/Likun/projects/bileichat/mesh-core/src/private.rs
+/home/Likun/projects/bileichat/mesh-core/src/radio.rs
+/home/Likun/projects/bileichat/mesh-core/src/statemachine.rs
+/home/Likun/projects/bileichat/mesh-core/src/store.rs
+/home/Likun/projects/bileichat/mesh-core/src/trust.rs
+/home/Likun/projects/bileichat/mesh-core/src/vdl.rs
+/home/Likun/projects/bileichat/mesh-core/tests/codec_props.rs
+/home/Likun/projects/bileichat/mesh-core/tests/ffi_roundtrip.rs
+/home/Likun/projects/bileichat/mesh-core/tests/pocp_props.rs
 
 ```
 
@@ -604,39 +604,39 @@ Let me check file sizes first to see if I can read them directly.
 **Input:**
 ```json
 {
-  "command": "wc -l /home/Likun/projects/cockroachat/mesh-core/src/*.rs /home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/*.kt /home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/ui/*.kt /home/Likun/projects/cockroachat/laptop/src/main.rs /home/Likun/projects/cockroachat/mesh-core/Cargo.toml"
+  "command": "wc -l /home/Likun/projects/bileichat/mesh-core/src/*.rs /home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/*.kt /home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/ui/*.kt /home/Likun/projects/bileichat/laptop/src/main.rs /home/Likun/projects/bileichat/mesh-core/Cargo.toml"
 }
 ```
 
 **Output:**
 ```
-   270 /home/Likun/projects/cockroachat/mesh-core/src/beacon.rs
-   146 /home/Likun/projects/cockroachat/mesh-core/src/codec.rs
-   269 /home/Likun/projects/cockroachat/mesh-core/src/crypto.rs
-   691 /home/Likun/projects/cockroachat/mesh-core/src/ffi.rs
-    29 /home/Likun/projects/cockroachat/mesh-core/src/lib.rs
-   673 /home/Likun/projects/cockroachat/mesh-core/src/message.rs
-   434 /home/Likun/projects/cockroachat/mesh-core/src/pocp.rs
-   262 /home/Likun/projects/cockroachat/mesh-core/src/private.rs
-    20 /home/Likun/projects/cockroachat/mesh-core/src/radio.rs
-   574 /home/Likun/projects/cockroachat/mesh-core/src/statemachine.rs
-    33 /home/Likun/projects/cockroachat/mesh-core/src/store.rs
-   184 /home/Likun/projects/cockroachat/mesh-core/src/trust.rs
-   111 /home/Likun/projects/cockroachat/mesh-core/src/vdl.rs
-   525 /home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/BleRadio.kt
-    67 /home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/Config.kt
-   721 /home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/GattPlane.kt
-   259 /home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MainActivity.kt
-   138 /home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/Measurement.kt
-    32 /home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MeshApp.kt
-   755 /home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MeshService.kt
-   116 /home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MeshState.kt
-   178 /home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/PairStore.kt
-   415 /home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/ui/Drawer.kt
-   590 /home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/ui/MeshUi.kt
-    70 /home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/ui/Theme.kt
-   459 /home/Likun/projects/cockroachat/laptop/src/main.rs
-    36 /home/Likun/projects/cockroachat/mesh-core/Cargo.toml
+   270 /home/Likun/projects/bileichat/mesh-core/src/beacon.rs
+   146 /home/Likun/projects/bileichat/mesh-core/src/codec.rs
+   269 /home/Likun/projects/bileichat/mesh-core/src/crypto.rs
+   691 /home/Likun/projects/bileichat/mesh-core/src/ffi.rs
+    29 /home/Likun/projects/bileichat/mesh-core/src/lib.rs
+   673 /home/Likun/projects/bileichat/mesh-core/src/message.rs
+   434 /home/Likun/projects/bileichat/mesh-core/src/pocp.rs
+   262 /home/Likun/projects/bileichat/mesh-core/src/private.rs
+    20 /home/Likun/projects/bileichat/mesh-core/src/radio.rs
+   574 /home/Likun/projects/bileichat/mesh-core/src/statemachine.rs
+    33 /home/Likun/projects/bileichat/mesh-core/src/store.rs
+   184 /home/Likun/projects/bileichat/mesh-core/src/trust.rs
+   111 /home/Likun/projects/bileichat/mesh-core/src/vdl.rs
+   525 /home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/BleRadio.kt
+    67 /home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/Config.kt
+   721 /home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/GattPlane.kt
+   259 /home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MainActivity.kt
+   138 /home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/Measurement.kt
+    32 /home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MeshApp.kt
+   755 /home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MeshService.kt
+   116 /home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MeshState.kt
+   178 /home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/PairStore.kt
+   415 /home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/ui/Drawer.kt
+   590 /home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/ui/MeshUi.kt
+    70 /home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/ui/Theme.kt
+   459 /home/Likun/projects/bileichat/laptop/src/main.rs
+    36 /home/Likun/projects/bileichat/mesh-core/Cargo.toml
   8057 total
 
 ```
@@ -671,13 +671,13 @@ Let me start reading the mesh-core files in parallel. I'll do 4-5 files per batc
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/mesh-core/src/lib.rs"
+  "filePath": "/home/Likun/projects/bileichat/mesh-core/src/lib.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/mesh-core/src/lib.rs</path>
+<path>/home/Likun/projects/bileichat/mesh-core/src/lib.rs</path>
 <type>file</type>
 <content>
 1: //! mesh-core — the single, shared, security-critical core for the offline protest mesh.
@@ -719,13 +719,13 @@ Let me start reading the mesh-core files in parallel. I'll do 4-5 files per batc
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/mesh-core/src/codec.rs"
+  "filePath": "/home/Likun/projects/bileichat/mesh-core/src/codec.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/mesh-core/src/codec.rs</path>
+<path>/home/Likun/projects/bileichat/mesh-core/src/codec.rs</path>
 <type>file</type>
 <content>
 1: //! `codec` — the fixed 226 B wire frame. THE anti-zip-bomb boundary (invariant #3).
@@ -884,13 +884,13 @@ Let me start reading the mesh-core files in parallel. I'll do 4-5 files per batc
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/mesh-core/src/crypto.rs"
+  "filePath": "/home/Likun/projects/bileichat/mesh-core/src/crypto.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/mesh-core/src/crypto.rs</path>
+<path>/home/Likun/projects/bileichat/mesh-core/src/crypto.rs</path>
 <type>file</type>
 <content>
 1: //! `crypto` — ephemeral Ed25519 identity (beacon-rotating) + AEAD.
@@ -1172,13 +1172,13 @@ Let me start reading the mesh-core files in parallel. I'll do 4-5 files per batc
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/mesh-core/src/message.rs"
+  "filePath": "/home/Likun/projects/bileichat/mesh-core/src/message.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/mesh-core/src/message.rs</path>
+<path>/home/Likun/projects/bileichat/mesh-core/src/message.rs</path>
 <type>file</type>
 <content>
 1: //! `message` — frame origination and body-text accessors.
@@ -1874,13 +1874,13 @@ Core codec/crypto/message read. Now the state machine, PoCP, trust, VDL, private
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/mesh-core/src/statemachine.rs"
+  "filePath": "/home/Likun/projects/bileichat/mesh-core/src/statemachine.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/mesh-core/src/statemachine.rs</path>
+<path>/home/Likun/projects/bileichat/mesh-core/src/statemachine.rs</path>
 <type>file</type>
 <content>
 1: //! `statemachine` — the message engine. Owns seen-set (time-decaying Bloom, window 2*T_epoch),
@@ -2467,13 +2467,13 @@ Core codec/crypto/message read. Now the state machine, PoCP, trust, VDL, private
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/mesh-core/src/pocp.rs"
+  "filePath": "/home/Likun/projects/bileichat/mesh-core/src/pocp.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/mesh-core/src/pocp.rs</path>
+<path>/home/Likun/projects/bileichat/mesh-core/src/pocp.rs</path>
 <type>file</type>
 <content>
 1: //! `pocp` — Proof-of-Co-Presence. Cell digest (fuzzy KMV over overheard marks) + spacetime
@@ -2920,13 +2920,13 @@ Core codec/crypto/message read. Now the state machine, PoCP, trust, VDL, private
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/mesh-core/src/trust.rs"
+  "filePath": "/home/Likun/projects/bileichat/mesh-core/src/trust.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/mesh-core/src/trust.rs</path>
+<path>/home/Likun/projects/bileichat/mesh-core/src/trust.rs</path>
 <type>file</type>
 <content>
 1: //! `trust` — diversity + corroboration. Danger escalates only at >= k DISTINCT locally-verified
@@ -3123,13 +3123,13 @@ Core codec/crypto/message read. Now the state machine, PoCP, trust, VDL, private
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/mesh-core/src/vdl.rs"
+  "filePath": "/home/Likun/projects/bileichat/mesh-core/src/vdl.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/mesh-core/src/vdl.rs</path>
+<path>/home/Likun/projects/bileichat/mesh-core/src/vdl.rs</path>
 <type>file</type>
 <content>
 1: //! VDL — Verifiable Delay Lottery (v0).
@@ -3261,13 +3261,13 @@ Now let me read the remaining core files: beacon.rs, private.rs, ffi.rs, store.r
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/mesh-core/src/beacon.rs"
+  "filePath": "/home/Likun/projects/bileichat/mesh-core/src/beacon.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/mesh-core/src/beacon.rs</path>
+<path>/home/Likun/projects/bileichat/mesh-core/src/beacon.rs</path>
 <type>file</type>
 <content>
 1: //! `beacon` — chained hash beacon (NO VDF in v0, audit F1).
@@ -3550,13 +3550,13 @@ Now let me read the remaining core files: beacon.rs, private.rs, ffi.rs, store.r
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/mesh-core/src/private.rs"
+  "filePath": "/home/Likun/projects/bileichat/mesh-core/src/private.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/mesh-core/src/private.rs</path>
+<path>/home/Likun/projects/bileichat/mesh-core/src/private.rs</path>
 <type>file</type>
 <content>
 1: //! Tier-3 private message body sealing.
@@ -3831,13 +3831,13 @@ Now let me read the remaining core files: beacon.rs, private.rs, ffi.rs, store.r
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/mesh-core/src/ffi.rs"
+  "filePath": "/home/Likun/projects/bileichat/mesh-core/src/ffi.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/mesh-core/src/ffi.rs</path>
+<path>/home/Likun/projects/bileichat/mesh-core/src/ffi.rs</path>
 <type>file</type>
 <content>
 1: //! Narrow, byte-oriented FFI surface exposed to the platform shims via UniFFI.
@@ -4541,13 +4541,13 @@ Now let me read the remaining core files: beacon.rs, private.rs, ffi.rs, store.r
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/mesh-core/src/store.rs"
+  "filePath": "/home/Likun/projects/bileichat/mesh-core/src/store.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/mesh-core/src/store.rs</path>
+<path>/home/Likun/projects/bileichat/mesh-core/src/store.rs</path>
 <type>file</type>
 <content>
 1: //! `store` — bounded persistence. Seen-set, cell history (last 2 epochs), pending alerts.
@@ -4593,13 +4593,13 @@ Now let me read the remaining core files: beacon.rs, private.rs, ffi.rs, store.r
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/mesh-core/src/radio.rs"
+  "filePath": "/home/Likun/projects/bileichat/mesh-core/src/radio.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/mesh-core/src/radio.rs</path>
+<path>/home/Likun/projects/bileichat/mesh-core/src/radio.rs</path>
 <type>file</type>
 <content>
 1: //! `radio` — the BLE transport seam. Implemented by each platform shim (Kotlin/Swift); the
@@ -4646,16 +4646,16 @@ Rust core fully mapped. The Kotlin `MeshService.ingestFrame` is the *live* pipel
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MeshService.kt"
+  "filePath": "/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MeshService.kt"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MeshService.kt</path>
+<path>/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MeshService.kt</path>
 <type>file</type>
 <content>
-1: package org.cockroachat.mesh
+1: package org.bileichat.mesh
 2: 
 3: import android.app.Notification
 4: import android.app.NotificationChannel
@@ -4704,7 +4704,7 @@ Rust core fully mapped. The Kotlin `MeshService.ingestFrame` is the *live* pipel
 47:         const val CHANNEL_NAME = "Mesh BLE"
 48: 
 49:         /** Start the service with this action to trigger an immediate panic wipe. */
-50:         const val ACTION_PANIC = "org.cockroachat.mesh.ACTION_PANIC"
+50:         const val ACTION_PANIC = "org.bileichat.mesh.ACTION_PANIC"
 51: 
 52:         // Private-send nonce counter. Own prefs file (NOT PairStore's "mesh_pairing_v2");
 53:         // performPanicWipe deletes this file explicitly.
@@ -5420,16 +5420,16 @@ Rust core fully mapped. The Kotlin `MeshService.ingestFrame` is the *live* pipel
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/Config.kt"
+  "filePath": "/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/Config.kt"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/Config.kt</path>
+<path>/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/Config.kt</path>
 <type>file</type>
 <content>
-1: package org.cockroachat.mesh
+1: package org.bileichat.mesh
 2: 
 3: import android.content.Context
 4: 
@@ -5506,16 +5506,16 @@ Rust core fully mapped. The Kotlin `MeshService.ingestFrame` is the *live* pipel
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MeshState.kt"
+  "filePath": "/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MeshState.kt"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MeshState.kt</path>
+<path>/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MeshState.kt</path>
 <type>file</type>
 <content>
-1: package org.cockroachat.mesh
+1: package org.bileichat.mesh
 2: 
 3: import kotlinx.coroutines.flow.MutableStateFlow
 4: import java.text.SimpleDateFormat
@@ -5651,16 +5651,16 @@ Now the radio, GATT plane, pairing store, measurement, and UI.
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/BleRadio.kt"
+  "filePath": "/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/BleRadio.kt"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/BleRadio.kt</path>
+<path>/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/BleRadio.kt</path>
 <type>file</type>
 <content>
-1: package org.cockroachat.mesh
+1: package org.bileichat.mesh
 2: 
 3: import android.annotation.SuppressLint
 4: import android.bluetooth.BluetoothDevice
@@ -6195,16 +6195,16 @@ Now the radio, GATT plane, pairing store, measurement, and UI.
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/PairStore.kt"
+  "filePath": "/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/PairStore.kt"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/PairStore.kt</path>
+<path>/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/PairStore.kt</path>
 <type>file</type>
 <content>
-1: package org.cockroachat.mesh
+1: package org.bileichat.mesh
 2: 
 3: import android.content.Context
 4: import android.os.Build
@@ -6268,12 +6268,12 @@ Now the radio, GATT plane, pairing store, measurement, and UI.
 62:      * Stable, versioned QR payload for a public X25519 pairing key.  It carries public material
 63:      * only; the private pairing secret and derived pair key never leave the device.
 64:      */
-65:     fun qrPayload(ctx: Context): String = "cockroachat:key:v1:${myPublicHex(ctx)}"
+65:     fun qrPayload(ctx: Context): String = "bileichat:key:v1:${myPublicHex(ctx)}"
 66: 
 67:     /** Accept raw hex (manual entry) or a scanned [qrPayload]. */
 68:     fun publicKeyFromQrOrHex(value: String): String? {
 69:         val trimmed = value.trim()
-70:         val raw = if (trimmed.startsWith("cockroachat:key:v1:", ignoreCase = true)) {
+70:         val raw = if (trimmed.startsWith("bileichat:key:v1:", ignoreCase = true)) {
 71:             trimmed.substringAfter(':', "")
 72:                 .substringAfter(':', "")
 73:                 .substringAfter(':', "")
@@ -6392,16 +6392,16 @@ Now the radio, GATT plane, pairing store, measurement, and UI.
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/Measurement.kt"
+  "filePath": "/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/Measurement.kt"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/Measurement.kt</path>
+<path>/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/Measurement.kt</path>
 <type>file</type>
 <content>
-1: package org.cockroachat.mesh
+1: package org.bileichat.mesh
 2: 
 3: import org.json.JSONArray
 4: import org.json.JSONObject
@@ -6557,16 +6557,16 @@ Now the UI files and remaining Kotlin files: GattPlane.kt, MainActivity.kt, Mesh
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/GattPlane.kt"
+  "filePath": "/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/GattPlane.kt"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/GattPlane.kt</path>
+<path>/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/GattPlane.kt</path>
 <type>file</type>
 <content>
-1: package org.cockroachat.mesh
+1: package org.bileichat.mesh
 2: 
 3: import android.annotation.SuppressLint
 4: import android.bluetooth.BluetoothDevice
@@ -6585,7 +6585,7 @@ Now the UI files and remaining Kotlin files: GattPlane.kt, MainActivity.kt, Mesh
 17: import java.util.concurrent.ConcurrentHashMap
 18: 
 19: /**
-20:  * GATT fallback transport for the cockroachat BLE mesh.
+20:  * GATT fallback transport for the bileichat BLE mesh.
 21:  *
 22:  * Provides the same wire contract as the extended-advertising plane but over GATT connections,
 23:  * so phones that do not support BLE 5 extended advertising can still exchange 226-byte frames.
@@ -7297,16 +7297,16 @@ Now the UI files and remaining Kotlin files: GattPlane.kt, MainActivity.kt, Mesh
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/ui/MeshUi.kt"
+  "filePath": "/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/ui/MeshUi.kt"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/ui/MeshUi.kt</path>
+<path>/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/ui/MeshUi.kt</path>
 <type>file</type>
 <content>
-1: package org.cockroachat.mesh.ui
+1: package org.bileichat.mesh.ui
 2: 
 3: import android.graphics.Bitmap
 4: import androidx.compose.foundation.Canvas
@@ -7371,11 +7371,11 @@ Now the UI files and remaining Kotlin files: GattPlane.kt, MainActivity.kt, Mesh
 63: import com.google.zxing.qrcode.QRCodeWriter
 64: import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 65: import kotlinx.coroutines.launch
-66: import org.cockroachat.mesh.Contact
-67: import org.cockroachat.mesh.MeshConfig
-68: import org.cockroachat.mesh.MeshState
-69: import org.cockroachat.mesh.MsgRow
-70: import org.cockroachat.mesh.SendTier
+66: import org.bileichat.mesh.Contact
+67: import org.bileichat.mesh.MeshConfig
+68: import org.bileichat.mesh.MeshState
+69: import org.bileichat.mesh.MsgRow
+70: import org.bileichat.mesh.SendTier
 71: import java.text.SimpleDateFormat
 72: import java.util.Date
 73: import java.util.Locale
@@ -7497,7 +7497,7 @@ Now the UI files and remaining Kotlin files: GattPlane.kt, MainActivity.kt, Mesh
 189:         }
 190:         Spacer(Modifier.width(10.dp))
 191:         Column {
-192:             Text("COCKROACHAT", style = monoLabel())
+192:             Text("BILEICHAT", style = monoLabel())
 193:             Text("BLE MESH · NO SERVERS", style = monoMicro())
 194:         }
 195:         Spacer(Modifier.weight(1f))
@@ -7914,16 +7914,16 @@ Let me read the remaining files: MainActivity.kt, Drawer.kt, Theme.kt, MeshApp.k
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MainActivity.kt"
+  "filePath": "/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MainActivity.kt"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MainActivity.kt</path>
+<path>/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MainActivity.kt</path>
 <type>file</type>
 <content>
-1: package org.cockroachat.mesh
+1: package org.bileichat.mesh
 2: 
 3: import android.content.ClipData
 4: import android.content.ClipboardManager
@@ -7938,9 +7938,9 @@ Let me read the remaining files: MainActivity.kt, Drawer.kt, Theme.kt, MeshApp.k
 13: import androidx.activity.result.contract.ActivityResultContracts
 14: import com.journeyapps.barcodescanner.ScanContract
 15: import com.journeyapps.barcodescanner.ScanOptions
-16: import org.cockroachat.mesh.ui.MeshTheme
-17: import org.cockroachat.mesh.ui.MeshUi
-18: import org.cockroachat.mesh.ui.UiController
+16: import org.bileichat.mesh.ui.MeshTheme
+17: import org.bileichat.mesh.ui.MeshUi
+18: import org.bileichat.mesh.ui.UiController
 19: import uniffi.mesh_core.jaccardSketch
 20: 
 21: /**
@@ -7957,7 +7957,7 @@ Let me read the remaining files: MainActivity.kt, Drawer.kt, Theme.kt, MeshApp.k
 32:             val payload = result.contents ?: return@registerForActivityResult
 33:             val key = PairStore.publicKeyFromQrOrHex(payload)
 34:             if (key == null) {
-35:                 toast("That QR is not a Cockroachat pairing key")
+35:                 toast("That QR is not a BileiChat pairing key")
 36:             } else {
 37:                 pendingQrCallback?.invoke(key)
 38:                 toast("Pairing key scanned")
@@ -8143,7 +8143,7 @@ Let me read the remaining files: MainActivity.kt, Drawer.kt, Theme.kt, MeshApp.k
 218:         scanQrLauncher.launch(
 219:             ScanOptions()
 220:                 .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-221:                 .setPrompt("Scan a Cockroachat pairing QR")
+221:                 .setPrompt("Scan a BileiChat pairing QR")
 222:                 .setBeepEnabled(false)
 223:                 .setOrientationLocked(false)
 224:         )
@@ -8192,16 +8192,16 @@ Let me read the remaining files: MainActivity.kt, Drawer.kt, Theme.kt, MeshApp.k
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/ui/Drawer.kt"
+  "filePath": "/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/ui/Drawer.kt"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/ui/Drawer.kt</path>
+<path>/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/ui/Drawer.kt</path>
 <type>file</type>
 <content>
-1: package org.cockroachat.mesh.ui
+1: package org.bileichat.mesh.ui
 2: 
 3: import androidx.compose.foundation.ExperimentalFoundationApi
 4: import androidx.compose.foundation.background
@@ -8236,9 +8236,9 @@ Let me read the remaining files: MainActivity.kt, Drawer.kt, Theme.kt, MeshApp.k
 33: import androidx.compose.ui.unit.dp
 34: import androidx.compose.ui.unit.sp
 35: import androidx.lifecycle.compose.collectAsStateWithLifecycle
-36: import org.cockroachat.mesh.MeshConfig
-37: import org.cockroachat.mesh.MeshState
-38: import org.cockroachat.mesh.SendTier
+36: import org.bileichat.mesh.MeshConfig
+37: import org.bileichat.mesh.MeshState
+38: import org.bileichat.mesh.SendTier
 39: 
 40: /**
 41:  * Left drawer: GUIDE (when to use which tier + trust legend), DETECTOR (nearby devices),
@@ -8258,7 +8258,7 @@ Let me read the remaining files: MainActivity.kt, Drawer.kt, Theme.kt, MeshApp.k
 55:             .padding(bottom = 24.dp)
 56:     ) {
 57:         Spacer(Modifier.height(18.dp))
-58:         Text("COCKROACHAT", style = monoLabel(), modifier = Modifier.padding(horizontal = 16.dp))
+58:         Text("BILEICHAT", style = monoLabel(), modifier = Modifier.padding(horizontal = 16.dp))
 59:         Text("CONTROL PANEL", style = monoMicro(), modifier = Modifier.padding(horizontal = 16.dp))
 60:         Spacer(Modifier.height(10.dp))
 61: 
@@ -8626,13 +8626,13 @@ Let me read the remaining files: MainActivity.kt, Drawer.kt, Theme.kt, MeshApp.k
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/android/app/src/main/AndroidManifest.xml"
+  "filePath": "/home/Likun/projects/bileichat/android/app/src/main/AndroidManifest.xml"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/android/app/src/main/AndroidManifest.xml</path>
+<path>/home/Likun/projects/bileichat/android/app/src/main/AndroidManifest.xml</path>
 <type>file</type>
 <content>
 1: <?xml version="1.0" encoding="utf-8"?>
@@ -8679,7 +8679,7 @@ Let me read the remaining files: MainActivity.kt, Drawer.kt, Theme.kt, MeshApp.k
 42:         android:roundIcon="@mipmap/ic_launcher"
 43:         android:label="@string/app_name"
 44:         android:supportsRtl="true"
-45:         android:theme="@style/Theme.Cockroachat">
+45:         android:theme="@style/Theme.BileiChat">
 46: 
 47:         <!-- Single unified app: one activity hosts the messaging UI and the settings drawer. -->
 48:         <activity
@@ -8830,7 +8830,7 @@ A22. **Panic button UX**: long-press to wipe — single confirm-less long press;
 
 A23. **private counter prefs**: PRIVATE_COUNTER_KEY in "mesh_pairing" prefs — NOT encrypted (plain SharedPreferences) — leaks message count (matches A6). Cleared on wipe ✓.
 
-A24. **QR pairing**: X25519 public keys via QR "cockroachat:key:v1:hex" — no authentication of the QR itself (MITM if scanned over channel attacker controls — accepted risk, out-of-band by design). No contact verification ceremony (SAS/fingerprint). Moderate (usability vs security). Also label up to 32 chars, no checks vs homoglyphs — contact impersonation in UI (label "Alice" added by attacker with attacker's key if they can trick user into adding) — user error domain.
+A24. **QR pairing**: X25519 public keys via QR "bileichat:key:v1:hex" — no authentication of the QR itself (MITM if scanned over channel attacker controls — accepted risk, out-of-band by design). No contact verification ceremony (SAS/fingerprint). Moderate (usability vs security). Also label up to 32 chars, no checks vs homoglyphs — contact impersonation in UI (label "Alice" added by attacker with attacker's key if they can trick user into adding) — user error domain.
 
 A25. **DOS via VDL solve on UI**: makePrivateFrame blocks seconds on Dispatchers.Default ✓. But concurrent private sends: outgoingPrivate StateFlow conflates (collect latest? StateFlow collect gets all emissions sequentially — actually StateFlow is conflated: rapid successive sends could drop intermediate values! Setting outgoingPrivate.value twice quickly → collector may see only latest → lost message. Reliability bug: queue, don't conflate. Also `MeshState.outgoingPrivate.value = null` reset at end — race with a new send arriving during solve → the new send overwritten by null → lost. Moderate reliability bug.
 
@@ -8924,16 +8924,16 @@ Core audit complete. Let me check the laptop client, app scaffolding, and look f
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/laptop/src/main.rs"
+  "filePath": "/home/Likun/projects/bileichat/laptop/src/main.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/laptop/src/main.rs</path>
+<path>/home/Likun/projects/bileichat/laptop/src/main.rs</path>
 <type>file</type>
 <content>
-1: // cockroachat-laptop — Linux laptop BLE mesh node.
+1: // bileichat-laptop — Linux laptop BLE mesh node.
 2: //
 3: // Advertises own frame as BLE extended advertising (SecondaryChannel::OneM)
 4: // and scans for peer frames.  ALL frame origination and parsing goes through
@@ -8969,8 +8969,8 @@ Core audit complete. Let me check the laptop client, app scaffolding, and look f
 34: // ─── CLI ──────────────────────────────────────────────────────────────────────
 35: #[derive(Parser, Debug)]
 36: #[command(
-37:     name = "cockroachat-laptop",
-38:     about = "Cockroachat BLE mesh node (Linux laptop)"
+37:     name = "bileichat-laptop",
+38:     about = "BileiChat BLE mesh node (Linux laptop)"
 39: )]
 40: struct Args {
 41:     /// Epoch length in milliseconds — MUST match phone default (10000)
@@ -9075,7 +9075,7 @@ Core audit complete. Let me check the laptop client, app scaffolding, and look f
 140:     adapter.set_powered(true).await?;
 141: 
 142:     let powered = adapter.is_powered().await?;
-143:     println!("=== cockroachat-laptop ===");
+143:     println!("=== bileichat-laptop ===");
 144:     println!("Adapter : {}  powered={}", adapter.name(), powered);
 145:     println!("Epoch ms: {}", args.epoch_ms);
 146:     println!("RSSI floor: {} dBm", args.rssi_floor);
@@ -9402,16 +9402,16 @@ Core audit complete. Let me check the laptop client, app scaffolding, and look f
 **Input:**
 ```json
 {
-  "filePath": "/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MeshApp.kt"
+  "filePath": "/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MeshApp.kt"
 }
 ```
 
 **Output:**
 ```
-<path>/home/Likun/projects/cockroachat/android/app/src/main/java/org/cockroachat/mesh/MeshApp.kt</path>
+<path>/home/Likun/projects/bileichat/android/app/src/main/java/org/bileichat/mesh/MeshApp.kt</path>
 <type>file</type>
 <content>
-1: package org.cockroachat.mesh
+1: package org.bileichat.mesh
 2: 
 3: import android.app.Application
 4: import android.content.Context
@@ -9453,7 +9453,7 @@ Core audit complete. Let me check the laptop client, app scaffolding, and look f
 **Input:**
 ```json
 {
-  "command": "git -C /home/Likun/projects/cockroachat log --oneline -15 && git -C /home/Likun/projects/cockroachat status --short | head -20"
+  "command": "git -C /home/Likun/projects/bileichat log --oneline -15 && git -C /home/Likun/projects/bileichat status --short | head -20"
 }
 ```
 
@@ -9469,19 +9469,19 @@ f0253ac Delete .github/workflows directory
 7297713 Update README: fix 194→226 byte references, add message/private/vdl modules, add laptop client section
 b866351 Untrack Claude chat markdown log
 16c074d Ignore and untrack session markdown files
-557e7ff Commit cockroachat mesh updates and ignore build artifacts
+557e7ff Commit bileichat mesh updates and ignore build artifacts
 390235c Add Section 9 Glossary of Terms to README.md
 52fc1f0 Update README with low-level architecture spec and remove build plan
-42327cf Initial commit of cockroachat
+42327cf Initial commit of bileichat
  M README.md
  M android/app/build.gradle.kts
  D android/app/src/live/AndroidManifest.xml
  M android/app/src/main/AndroidManifest.xml
- D android/app/src/main/java/org/cockroachat/mesh/ChatActivity.kt
- M android/app/src/main/java/org/cockroachat/mesh/MainActivity.kt
- M android/app/src/main/java/org/cockroachat/mesh/Measurement.kt
- M android/app/src/main/java/org/cockroachat/mesh/MeshService.kt
- M android/app/src/main/java/org/cockroachat/mesh/MeshState.kt
+ D android/app/src/main/java/org/bileichat/mesh/ChatActivity.kt
+ M android/app/src/main/java/org/bileichat/mesh/MainActivity.kt
+ M android/app/src/main/java/org/bileichat/mesh/Measurement.kt
+ M android/app/src/main/java/org/bileichat/mesh/MeshService.kt
+ M android/app/src/main/java/org/bileichat/mesh/MeshState.kt
  M android/app/src/main/java/uniffi/mesh_core/mesh_core.kt
  M android/app/src/main/jniLibs/arm64-v8a/libmesh_core.so
  M android/app/src/main/jniLibs/armeabi-v7a/libmesh_core.so
@@ -9548,7 +9548,7 @@ Also on private send: gattPlane.currentFrame = frame (private) → pushed to GAT
 
 Private receive: displayed with tier PRIVATE ✓. UI shows all in one feed.
 
-OK — also check PairStore secret(): stored sk reused across runs — long-term identity ✓ by design. addContact: label uniqueness enforced via filter-replace ✓. QR payload parsing: `substringAfter(':', "")` chained thrice — "cockroachat:key:v1:HEX" → after 1st colon "key:v1:HEX" → 2nd "v1:HEX" → 3rd "HEX" ✓. Case-insensitive prefix but hex parse lowercase? Character.digit handles both cases ✓.
+OK — also check PairStore secret(): stored sk reused across runs — long-term identity ✓ by design. addContact: label uniqueness enforced via filter-replace ✓. QR payload parsing: `substringAfter(':', "")` chained thrice — "bileichat:key:v1:HEX" → after 1st colon "key:v1:HEX" → 2nd "v1:HEX" → 3rd "HEX" ✓. Case-insensitive prefix but hex parse lowercase? Character.digit handles both cases ✓.
 
 Missing: no verification that peer's public key is not OUR OWN public key (self-pairing → pairDerive(sk, own pk) works, creates a "self" contact — harmless).
 
@@ -9665,7 +9665,7 @@ I've completed a full read of the Rust core (`codec`, `crypto`, `message`, `pocp
 
 ---
 
-# Cockroachat Security Audit — v0.5
+# BileiChat Security Audit — v0.5
 
 **Ranking:** **A** = critical (defeats a headline security guarantee, remotely exploitable) · **B** = high (privacy/DoS/safety degradation) · **C** = medium (bugs, reliability) · **D** = low (hygiene, docs).
 

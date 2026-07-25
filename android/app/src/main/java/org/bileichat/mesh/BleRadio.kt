@@ -1,4 +1,4 @@
-package org.cockroachat.mesh
+package org.bileichat.mesh
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
@@ -34,8 +34,25 @@ class BleRadio(private val ctx: Context) {
     @Volatile private var currentAdvSet: AdvertisingSet? = null
     private var advCallback: AdvertisingSetCallback? = null
     private val scanCallbacks = mutableListOf<ScanCallback>()
-    private var activeRelaySets = 0
-    private var privateAdvActive = false
+    /** Relay advertising slots in use. Incremented on the relay-drain coroutine, decremented
+     *  from both the BLE callback thread and the main handler — must be atomic. */
+    private val activeRelaySets = java.util.concurrent.atomic.AtomicInteger(0)
+    @Volatile private var privateAdvActive = false
+
+    /**
+     * Pending private-window restore runnable.
+     *
+     * This used to be posted on a freshly constructed anonymous Handler, so nothing could
+     * ever cancel it. A panic wipe (or a plain radio-off toggle) during the ≤6 s private
+     * window tore everything down, and then the orphaned runnable fired and called
+     * startAdvertising() again — the phone resumed beaconing the mesh service UUID after a
+     * wipe whose contract is that the device is sterile, with no service, no watchdog and
+     * nothing left to ever stop it. The frame bytes are zeroed by the wipe, so no content
+     * leaked, but the RF presence did.
+     *
+     * Held here (and posted on the shared [mainHandler]) so [stopAdvertising] can cancel it.
+     */
+    private var privateRestore: Runnable? = null
 
     // Advertising single-flight. startAdvertisingSet is asynchronous: the handle only
     // arrives in the callback, so currentAdvSet is null for a window after every start.
@@ -86,6 +103,24 @@ class BleRadio(private val ctx: Context) {
         return adapter != null && adapter.isLeCodedPhySupported
     }
 
+    /**
+     * True when this adapter can put a whole 226-byte frame into an advertisement.
+     * Frame (226 B) + UUID + AD framing overhead needs ~260 B of advertising capacity.
+     *
+     * P6: adapters that fail this can ONLY move frames over the GATT plane. Origination
+     * already honoured that (startLegacyFallbackLocked), but advertiseRelayOnce did not —
+     * it built setLegacyMode(false) unconditionally, so on these phones every relay failed
+     * silently while still holding an activeRelaySets slot for its full duration. Multi-hop
+     * propagation was dead on older hardware.
+     */
+    @SuppressLint("MissingPermission")
+    fun extendedAdvCapable(): Boolean = try {
+        val a = adapter
+        a != null && a.isLeExtendedAdvertisingSupported && a.leMaximumAdvertisingDataLength >= 260
+    } catch (e: Exception) {
+        false
+    }
+
     @SuppressLint("MissingPermission")
     fun startAdvertising(frame: ByteArray, codedPhy: Boolean, advIntervalMs: Long) {
         synchronized(advLock) {
@@ -110,15 +145,9 @@ class BleRadio(private val ctx: Context) {
                     .toInt()
                     .coerceIn(INTERVAL_UNIT_MIN, INTERVAL_UNIT_MAX)
 
-                // Frame (226 B) + UUID + AD framing overhead needs ~260 B of adv capacity.
-                // Adapters that can't fit it (or can't do extended adv at all) get the legacy
-                // fallback: a connectable UUID-only beacon; frames then flow over GATT.
-                val extCapable = try {
-                    adapter.isLeExtendedAdvertisingSupported && adapter.leMaximumAdvertisingDataLength >= 260
-                } catch (e: Exception) {
-                    false
-                }
-                if (!extCapable) {
+                // Adapters that can't fit a whole frame (or can't do extended adv at all) get
+                // the legacy fallback: a connectable UUID-only beacon; frames flow over GATT.
+                if (!extendedAdvCapable()) {
                     startLegacyFallbackLocked(advertiser, intervalUnits)
                     return
                 }
@@ -182,16 +211,23 @@ class BleRadio(private val ctx: Context) {
                                 p
                             }
                             if (pending != null) {
-                                try {
-                                    advertisingSet.setAdvertisingData(
-                                        AdvertiseData.Builder()
-                                            .addServiceUuid(PARCEL_UUID)
-                                            .addServiceData(PARCEL_UUID, pending)
-                                            .setIncludeDeviceName(false)
-                                            .build()
-                                    )
-                                } catch (e: Exception) {
-                                    onDebug?.invoke("pending frame apply failed: ${e.message}")
+                                // Full stop+start, NOT setAdvertisingData(). That API is the
+                                // one this file already documents as silently broken on real
+                                // stacks (see the note above the scan section): it killed the
+                                // set outright on a Samsung and no-opped on MIUI, both
+                                // returning success. Using it here meant a frame composed
+                                // during the async start window — hitting SEND while the
+                                // epoch-rollover start was in flight, which is the common
+                                // case — either never reached the air or left the stale frame
+                                // airing for the rest of the epoch, with the watchdog unable
+                                // to tell either had happened.
+                                //
+                                // Posted rather than called inline: we are on the BLE callback
+                                // thread and are about to stop the very set whose callback is
+                                // currently running.
+                                onDebug?.invoke("applying coalesced frame via full restart")
+                                mainHandler.post {
+                                    startAdvertising(pending, codedPhy, advIntervalMs)
                                 }
                             }
                         }
@@ -327,7 +363,21 @@ class BleRadio(private val ctx: Context) {
             lastOnLegacyPeer = onLegacyPeer
             lastOnFrame = onFrame
 
-            val scanner = adapter?.bluetoothLeScanner ?: return
+            // No scanner: Bluetooth is off (or mid-toggle). wantScanning is already set, but
+            // no scan was ever started, so no onScanFailed will ever arrive to trigger the
+            // self-heal below — the mesh stayed permanently deaf until the service restarted.
+            // MeshService calls startScanning exactly once, so "BT off at service start" or a
+            // BT off/on toggle killed reception for the rest of the session. Retry instead.
+            val scanner = adapter?.bluetoothLeScanner ?: run {
+                onDebug?.invoke("no BLE scanner (bluetooth off?) — retrying scan in 2s")
+                mainHandler.postDelayed({
+                    val frameCb = lastOnFrame
+                    if (wantScanning && frameCb != null) {
+                        startScanning(lastLowLatency, lastOnLegacyPeer, frameCb)
+                    }
+                }, 2_000L)
+                return
+            }
 
             val filter = ScanFilter.Builder()
                 .setServiceUuid(PARCEL_UUID)
@@ -397,21 +447,31 @@ class BleRadio(private val ctx: Context) {
 
     /** B8: true while a hardware relay slot is free. The service's relay queue drains only
      *  when this holds — frames WAIT for a slot instead of being silently dropped. */
-    fun relayCapacityAvailable(): Boolean = activeRelaySets < 2
+    fun relayCapacityAvailable(): Boolean = activeRelaySets.get() < 2
 
     /**
      * One-shot relay advertisement. [codedPhy] (C6): honor the configured PHY so relayed
      * frames reach the same long-range frontier as originations — previously relays were
      * hardcoded to 1M and died at the edge of coded-PHY range.
+     *
+     * Returns true when a relay advertisement was actually started. False means this
+     * adapter cannot air the frame; the caller's GATT-plane relay is then the only path.
      */
     @SuppressLint("MissingPermission")
-    fun advertiseRelayOnce(frame: ByteArray, durationMs: Long, codedPhy: Boolean = false) {
-        if (activeRelaySets >= 2) {
-            onDebug?.invoke("relay skipped: 2 relay sets already active")
-            return
+    fun advertiseRelayOnce(frame: ByteArray, durationMs: Long, codedPhy: Boolean = false): Boolean {
+        // P6: a legacy-only adapter cannot carry 226 bytes in an advertisement. Attempting it
+        // burns a relay slot for durationMs and fails silently. Say so and let GATT carry it.
+        if (!extendedAdvCapable()) {
+            onDebug?.invoke("relay over-the-air skipped: adapter has no extended advertising (GATT plane only)")
+            return false
         }
+        if (activeRelaySets.get() >= 2) {
+            onDebug?.invoke("relay skipped: 2 relay sets already active")
+            return false
+        }
+        var counted = false
         try {
-            val advertiser = adapter?.bluetoothLeAdvertiser ?: return
+            val advertiser = adapter?.bluetoothLeAdvertiser ?: return false
             val useCoded = codedPhy && codedPhySupported()
             val phy = if (useCoded) BluetoothDevice.PHY_LE_CODED else BluetoothDevice.PHY_LE_1M
             val params = AdvertisingSetParameters.Builder()
@@ -428,23 +488,62 @@ class BleRadio(private val ctx: Context) {
                 .addServiceData(PARCEL_UUID, frame)
                 .setIncludeDeviceName(false)
                 .build()
-            val cb = object : AdvertisingSetCallback() {}
-            activeRelaySets++
-            advertiser.startAdvertisingSet(params, data, null, null, null, cb)
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                try {
-                    advertiser.stopAdvertisingSet(cb)
-                } catch (e: Exception) {
-                    onDebug?.invoke("relay stop failed: ${e.message}")
+            // One-shot slot release, shared by the failure path and the scheduled stop.
+            val released = java.util.concurrent.atomic.AtomicBoolean(false)
+
+            // The old callback was `object : AdvertisingSetCallback() {}` — an empty override
+            // set that swallowed every failure status. A relay that never reached the air was
+            // indistinguishable from one that did.
+            val cb = object : AdvertisingSetCallback() {
+                override fun onAdvertisingSetStarted(
+                    advertisingSet: AdvertisingSet?,
+                    txPower: Int,
+                    status: Int
+                ) {
+                    if (status != ADVERTISE_SUCCESS) {
+                        onDebug?.invoke("relay adv rejected by stack: status=$status")
+                        // Nothing went on air, so there is no set to stop — just free the
+                        // slot now instead of holding it for the whole window.
+                        if (released.compareAndSet(false, true)) activeRelaySets.decrementAndGet()
+                        return
+                    }
+                    // Started successfully — but if the stop timer has ALREADY fired, the
+                    // stopAdvertisingSet() it issued raced ahead of this callback and stopped
+                    // nothing. The set is coming up right now with no one tracking it: it
+                    // would re-air its 2-second relay frame indefinitely and hold a hardware
+                    // advertising slot until process death. Kill it here.
+                    if (released.get()) {
+                        try {
+                            adapter?.bluetoothLeAdvertiser?.stopAdvertisingSet(this)
+                        } catch (e: Exception) {
+                            onDebug?.invoke("late relay set stop failed: ${e.message}")
+                        }
+                        onDebug?.invoke("relay set started after its stop — stopped it (zombie prevented)")
+                    }
                 }
-                activeRelaySets--
+            }
+            activeRelaySets.incrementAndGet()
+            counted = true
+            advertiser.startAdvertisingSet(params, data, null, null, null, cb)
+            mainHandler.postDelayed({
+                if (released.compareAndSet(false, true)) {
+                    activeRelaySets.decrementAndGet()
+                    try {
+                        advertiser.stopAdvertisingSet(cb)
+                    } catch (e: Exception) {
+                        onDebug?.invoke("relay stop failed: ${e.message}")
+                    }
+                }
             }, durationMs)
+            return true
         } catch (e: SecurityException) {
-            activeRelaySets--
+            if (counted) activeRelaySets.decrementAndGet()
             onDebug?.invoke("relay adv denied: ${e.message}")
+            return false
         } catch (e: Exception) {
-            activeRelaySets--
+            if (counted) activeRelaySets.decrementAndGet()
             onDebug?.invoke("relay adv failed: ${e.message}")
+            return false
         }
     }
 
@@ -472,11 +571,14 @@ class BleRadio(private val ctx: Context) {
         privateAdvActive = true
         startAdvertising(frame, codedPhy, advIntervalMs)
         onDebug?.invoke("private frame using primary advertising set")
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+        val restore = Runnable {
+            synchronized(advLock) { privateRestore = null }
             privateAdvActive = false
             startAdvertising(restoreFrame, codedPhy, advIntervalMs)
             onRestored()
-        }, durationMs)
+        }
+        synchronized(advLock) { privateRestore = restore }
+        mainHandler.postDelayed(restore, durationMs)
         return true
     }
 
@@ -489,8 +591,25 @@ class BleRadio(private val ctx: Context) {
     @SuppressLint("MissingPermission")
     fun stopAdvertising() {
         synchronized(advLock) {
+            // Teardown, not a restart: drop any pending private-window restore so it cannot
+            // put the radio back on air afterwards. Deliberately NOT done inside
+            // stopAdvertisingLocked(), which startAdvertising() calls on every normal
+            // stop+start — cancelling there would strand the private frame on air forever.
+            cancelPrivateRestoreLocked()
             stopAdvertisingLocked()
         }
+    }
+
+    /** Caller must hold advLock. */
+    private fun cancelPrivateRestoreLocked() {
+        privateRestore?.let {
+            mainHandler.removeCallbacks(it)
+            onDebug?.invoke("private restore cancelled by teardown")
+        }
+        privateRestore = null
+        // Reset unconditionally: this was never cleared on stop, so a stop/start cycle
+        // inside one private window left the flag set and refused every later private send.
+        privateAdvActive = false
     }
 
     /** Caller must hold advLock. */
@@ -517,11 +636,16 @@ class BleRadio(private val ctx: Context) {
     private fun stopScanning() {
         wantScanning = false
         try {
-            val scanner = adapter?.bluetoothLeScanner ?: return
-            for (cb in scanCallbacks) scanner.stopScan(cb)
+            // Clear the callback list even when the scanner is gone (BT off): the old early
+            // return left stale callbacks accumulating across every off/on cycle.
+            val scanner = adapter?.bluetoothLeScanner
+            if (scanner != null) {
+                for (cb in scanCallbacks) scanner.stopScan(cb)
+            }
             scanCallbacks.clear()
         } catch (e: SecurityException) {
             onDebug?.invoke("stopScanning SecurityException: ${e.message}")
+            scanCallbacks.clear()
         }
     }
 
@@ -531,6 +655,13 @@ class BleRadio(private val ctx: Context) {
      * stack hiccups) — the service watchdog uses this to re-advertise within ~1 s instead
      * of waiting for the next epoch rollover. Counting in-flight starts is essential:
      * without it the watchdog fired inside the async start window and double-started.
+     *
+     * KNOWN BLIND SPOT (deliberate): [currentAdvSet] is cleared only by
+     * onAdvertisingSetStopped or an explicit stop. A controller that reclaims the set with
+     * no callback leaves this reporting true forever, so the watchdog cannot see it. Not
+     * papered over with a staleness timer: rebuildAndAdvertise already does an unconditional
+     * full stop+start every epoch, which bounds the dead air at one epoch, and a timer that
+     * restarts more often than that would cost more airtime and battery than it recovers.
      */
     fun advertisingActive(): Boolean = advStartInFlight || currentAdvSet != null
 }

@@ -1,12 +1,12 @@
 [package]
-name = "cockroachat-laptop"
+name = "bileichat-laptop"
 version = "0.1.0"
 edition = "2021"
-description = "Linux laptop BLE mesh chat client — full cockroachat protocol node"
+description = "Linux laptop BLE mesh chat client — full bileichat protocol node"
 license = "AGPL-3.0-or-later"
 
 [[bin]]
-name = "cockroachat-laptop"
+name = "bileichat-laptop"
 path = "src/main.rs"
 
 [dependencies]

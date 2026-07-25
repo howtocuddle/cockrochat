@@ -1,4 +1,4 @@
-package org.cockroachat.mesh.ui
+package org.bileichat.mesh.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -7,7 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.sp
-import org.cockroachat.mesh.SendTier
+import org.bileichat.mesh.SendTier
 
 // AMOLED industrial palette: true black canvas, near-black panels, hairline borders,
 // tier colors as the only saturated accents.

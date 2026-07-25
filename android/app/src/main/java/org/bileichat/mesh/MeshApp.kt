@@ -1,4 +1,4 @@
-package org.cockroachat.mesh
+package org.bileichat.mesh
 
 import android.app.Application
 import android.content.Context

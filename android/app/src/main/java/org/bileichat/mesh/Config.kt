@@ -1,4 +1,4 @@
-package org.cockroachat.mesh
+package org.bileichat.mesh
 
 import android.content.Context
 
@@ -8,7 +8,7 @@ data class MeshConfig(
     val beaconFloorMs: Long = 10_000L,
     /** Minimum distinct LocalImmediate marks required to produce beacon entropy. */
     val minHearers: Int = 3,
-    val tauThreshold: Float = 0.5f,
+    val tauThreshold: Float = 0.3f,
     val rssiFloorDbm: Int = -80,
     val codedPhy: Boolean = true,
     val advIntervalMs: Long = 1000L,
@@ -58,7 +58,7 @@ object ConfigStore {
             epochMs = prefs.getLong(KEY_EPOCH_MS, 10_000L),
             beaconFloorMs = prefs.getLong(KEY_BEACON_FLOOR_MS, 10_000L),
             minHearers = prefs.getInt(KEY_MIN_HEARERS, 3),
-            tauThreshold = prefs.getFloat(KEY_TAU, 0.5f),
+            tauThreshold = prefs.getFloat(KEY_TAU, 0.3f),
             rssiFloorDbm = prefs.getInt(KEY_RSSI_FLOOR, -80),
             codedPhy = prefs.getBoolean(KEY_CODED_PHY, true),
             advIntervalMs = prefs.getLong(KEY_ADV_INTERVAL, 1000L),

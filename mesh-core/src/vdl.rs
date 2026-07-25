@@ -46,7 +46,13 @@ fn leading_zero_bits(digest: &[u8; 32]) -> u32 {
 
 /// Search for a witness meeting `difficulty_bits`. Deterministic counter search;
 /// runtime grows ~2^difficulty_bits. Blocking — callers run it off the UI thread.
+///
+/// `difficulty_bits` is clamped to 64: the parameter is a `u8`, so a caller could ask for
+/// 255 bits and hang the thread effectively forever (the u128 counter would wrap long
+/// before a hit). Not reachable from the FFI, which hardcodes `VDL_DIFFICULTY_BITS`, but a
+/// future caller should get a slow answer rather than a permanent one.
 pub fn solve(prefix: &[u8], difficulty_bits: u8) -> [u8; 16] {
+    let difficulty_bits = difficulty_bits.min(64);
     let mut counter: u128 = 0;
     loop {
         let witness = counter.to_le_bytes();

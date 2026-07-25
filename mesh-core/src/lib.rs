@@ -24,6 +24,5 @@ pub mod pocp;
 pub mod private;
 pub mod radio;
 pub mod statemachine;
-pub mod store;
 pub mod trust;
 pub mod vdl;

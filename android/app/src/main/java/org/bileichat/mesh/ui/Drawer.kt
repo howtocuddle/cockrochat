@@ -1,4 +1,4 @@
-package org.cockroachat.mesh.ui
+package org.bileichat.mesh.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -33,9 +34,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import org.cockroachat.mesh.MeshConfig
-import org.cockroachat.mesh.MeshState
-import org.cockroachat.mesh.SendTier
+import org.bileichat.mesh.MeshConfig
+import org.bileichat.mesh.MeshState
+import org.bileichat.mesh.SendTier
 
 /**
  * Left drawer: GUIDE (when to use which tier + trust legend), DETECTOR (nearby devices),
@@ -43,8 +44,8 @@ import org.cockroachat.mesh.SendTier
  */
 @Composable
 fun DrawerPane(controller: UiController) {
-    var guideOpen by rememberSaveable { mutableStateOf(true) }
-    var detectorOpen by rememberSaveable { mutableStateOf(true) }
+    var guideOpen by rememberSaveable { mutableStateOf(false) }
+    var detectorOpen by rememberSaveable { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var diagOpen by rememberSaveable { mutableStateOf(false) }
 
@@ -52,10 +53,14 @@ fun DrawerPane(controller: UiController) {
         Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
+            // Same edge-to-edge fix as ChatPane: clear the cutout camera and the navigation
+            // bar, not just the status bar. The drawer has text fields, so IME padding
+            // (included in safeDrawing) keeps them above the keyboard too.
+            .safeDrawingPadding()
             .padding(bottom = 24.dp)
     ) {
         Spacer(Modifier.height(18.dp))
-        Text("COCKROACHAT", style = monoLabel(), modifier = Modifier.padding(horizontal = 16.dp))
+        Text("BILEICHAT", style = monoLabel(), modifier = Modifier.padding(horizontal = 16.dp))
         Text("CONTROL PANEL", style = monoMicro(), modifier = Modifier.padding(horizontal = 16.dp))
         Spacer(Modifier.height(10.dp))
 
@@ -344,10 +349,20 @@ private fun DiagnosticsSection(controller: UiController) {
             DiagButton("EXPORT LOG", Modifier.weight(1f)) { controller.exportLog() }
             DiagButton("CLEAR LOG", Modifier.weight(1f)) { controller.clearLog() }
         }
+        // The measurement export already carried a privacy warning; the log export did not,
+        // even though it records epochs, presence counts and message activity timings.
+        Text(
+            "Exports leave the app. The log records timings and mesh activity — treat it as " +
+                "sensitive and delete it after use.",
+            style = monoMicro(TrustAmber)
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DiagButton("EXPORT DATA", Modifier.weight(1f)) { controller.exportMeasurements() }
             DiagButton("COPY SKETCH", Modifier.weight(1f)) { controller.copySketch() }
         }
+        // P1: moved out of startup — launching this Settings screen from onCreate backgrounded
+        // the activity mid-permission-chain and killed the process before permissions showed.
+        DiagButton("KEEP ALIVE IN DOZE", Modifier.fillMaxWidth()) { controller.requestBatteryBypass() }
 
         Text("COMPARE PEER SKETCH (SAME CELL?)", style = monoMicro())
         OutlinedTextField(

@@ -1,4 +1,4 @@
-package org.cockroachat.mesh
+package org.bileichat.mesh
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
@@ -17,7 +17,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * GATT fallback transport for the cockroachat BLE mesh.
+ * GATT fallback transport for the bileichat BLE mesh.
  *
  * Provides the same wire contract as the extended-advertising plane but over GATT connections,
  * so phones that do not support BLE 5 extended advertising can still exchange 226-byte frames.
@@ -69,6 +69,9 @@ class GattPlane(
         /** A legacy peer must beacon persistently for this long before we spend a client
          *  slot on it (three cheap dongles flashing the UUID must not exhaust slots). */
         private const val MIN_PEER_AGE_MS = 8_000L
+        /** Give up on a connectGatt that never reports a state change (ms). autoConnect=false
+         *  has no stack-level timeout, so without this a stuck attempt holds a slot forever. */
+        private const val CONNECT_TIMEOUT_MS = 10_000L
 
         // ---- C5: app-level chunking for small MTUs ----
         /** First byte of a chunk write (distinguishes chunks from whole-frame writes). */
@@ -79,6 +82,8 @@ class GattPlane(
 
     private val bluetoothManager =
         ctx.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     // ---- Server side -------------------------------------------------------
 
@@ -145,6 +150,16 @@ class GattPlane(
             override fun run() {
                 val now = System.currentTimeMillis()
                 for ((addr, pair) in centralActivity) {
+                    // A SUBSCRIBED central is a healthy listener, not an idle squatter.
+                    // Notifications are server-initiated, so a legacy phone that connects,
+                    // subscribes and then quietly receives produces no server-side ATT
+                    // traffic at all — touchCentral() fires on reads/writes/descriptor
+                    // writes only, never on notifySubscribers(). Every such peer was
+                    // therefore evicted 60 s after subscribing, and reconnecting cost
+                    // RECONNECT_BACKOFF plus a fresh MIN_PEER_AGE_MS dwell: roughly 13 s
+                    // deaf every minute, on exactly the phones this fallback plane exists
+                    // to carry.
+                    if (notifySubscribers.containsKey(addr)) continue
                     if (now - pair.second > CENTRAL_IDLE_TIMEOUT_MS) {
                         try {
                             gattServer?.cancelConnection(pair.first)
@@ -165,10 +180,21 @@ class GattPlane(
             centralWatchdog?.cancel()
             centralWatchdog = null
 
-            // Close all client GATTs
+            // Close all client GATTs.
             for ((addr, state) in peers) {
                 try {
+                    // Cancel the per-peer RSSI timer and clear the liveness flags FIRST.
+                    // The timer's self-cancel guard is `!state.connected || state.gatt == null`,
+                    // and stop() used to leave both untrue while readRemoteRssi() on a closed
+                    // BluetoothGatt merely returns false without throwing — so every peer
+                    // leaked a daemon Timer waking every 5 s until process death, including
+                    // after a panic wipe.
+                    state.rssiPollHandle?.cancel()
+                    state.rssiPollHandle = null
+                    state.connected = false
+                    state.connecting = false
                     state.gatt?.close()
+                    state.gatt = null
                 } catch (e: Exception) {
                     onDebug("gatt close[$addr] exception: ${e.message}")
                 }
@@ -550,6 +576,33 @@ class GattPlane(
             val gatt = device.connectGatt(ctx, false, makeClientCallback(state),
                 BluetoothDevice.TRANSPORT_LE)
             state.gatt = gatt
+            if (gatt == null) {
+                // connectGatt can return null. Nothing resets `connecting` in that case, so
+                // the slot was held forever by a connection that never existed.
+                onDebug("connectGatt[$addr] returned null — freeing slot")
+                state.connecting = false
+                peers.remove(addr)
+                return
+            }
+            // With autoConnect=false there is no stack-level connect timeout: on a marginal
+            // link onConnectionStateChange may take ~30 s or never fire at all. The peer cap
+            // counts `connected || connecting`, so a few stuck attempts burned every client
+            // slot until process death — a cheap dongle that beacons past MIN_PEER_AGE_MS and
+            // then goes quiet could pin them deliberately.
+            mainHandler.postDelayed({
+                if (state.connecting && !state.connected) {
+                    onDebug("gatt client: connect to $addr timed out — freeing slot")
+                    state.connecting = false
+                    try {
+                        state.gatt?.disconnect()
+                        state.gatt?.close()
+                    } catch (e: Exception) {
+                        onDebug("connect-timeout close[$addr] failed: ${e.message}")
+                    }
+                    state.gatt = null
+                    peers.remove(addr)
+                }
+            }, CONNECT_TIMEOUT_MS)
         } catch (e: SecurityException) {
             onDebug("connectGatt[$addr] SecurityException: ${e.message}")
             state.connecting = false
@@ -745,6 +798,16 @@ class GattPlane(
                         state.pendingWrites.clear()
                         state.writeInFlight = false
                     }
+                    // Start the poll anyway. Sending and receiving are independent: for a
+                    // small-MTU peer (<229) notifications cannot carry a whole frame, so the
+                    // RSSI poll's read-back IS the only receive path. Gating it on the first
+                    // write succeeding meant one transient GATT_BUSY left the link "connected"
+                    // but permanently unable to hear that peer, with no retry.
+                    if (!state.initialWriteDone) {
+                        state.initialWriteDone = true
+                        onDebug("gatt client: $addr initial write failed; starting RSSI poll anyway")
+                        startRssiPoll(gatt, state)
+                    }
                     return
                 }
                 // C5: continue a chunk chain, or finish.
@@ -905,7 +968,13 @@ class GattPlane(
                     // C5: below MTU_MIN_FOR_NOTIFY the peer's 226-byte notifications never
                     // arrive — poll-read FRAME_TX instead (server supports offset reads,
                     // so the stack's blob-read assembles the full frame).
-                    if (state.mtu < MTU_MIN_FOR_NOTIFY) {
+                    // Skip the read while a chunked write is in flight: Android serializes
+                    // one GATT operation per connection, so an overlapping read makes the
+                    // next writeCharacteristic return false and writeNextChunkLocked drops
+                    // the whole queue — losing that frame to this peer entirely. The next
+                    // tick 5 s later picks the read back up.
+                    val busy = synchronized(state.writeLock) { state.writeInFlight }
+                    if (state.mtu < MTU_MIN_FOR_NOTIFY && !busy) {
                         val char = gatt.getService(SERVICE_UUID)?.getCharacteristic(CHAR_FRAME_TX)
                         if (char != null) gatt.readCharacteristic(char)
                     }

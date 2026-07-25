@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "cockroachat"
+rootProject.name = "bileichat"
 include(":app")

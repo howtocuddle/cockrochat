@@ -40,6 +40,13 @@ use std::collections::VecDeque;
 /// Default bound on tracked frame hashes (R5: remote memory-exhaustion DoS otherwise).
 const DEFAULT_CAP: usize = 4096;
 
+/// Maximum distinct cell claims retained per frame hash.
+///
+/// `distinct_count` is a HINT, never proof: a single co-located adversary can mint claims
+/// at will (the witness MAC key is public — see the `pocp` module header). The cap bounds
+/// the memory that costs, and stops the displayed corroboration number running away.
+const MAX_CLAIMS_PER_FRAME: usize = 32;
+
 /// Simplified trust state for v0: counts distinct cell sketches that verified each frame.
 /// Full DiversitySketch KMV union is deferred (M6).
 ///
@@ -96,6 +103,14 @@ impl TrustState {
 
         let new_cell = pocp::div_sketch_to_cell(&div_sketch);
         let set = self.verifications.entry(frame_hash).or_default();
+        // Per-hash claim cap. Only the OUTER map was bounded, so one co-located attacker
+        // sending the same text with a fresh random div_sketch each time inserted an entry
+        // every round (random sketches are pairwise dissimilar, so the R2 domination check
+        // never collapses them) — unbounded growth from wire input, and a corroboration
+        // count limited only by how long the attacker keeps transmitting.
+        if set.len() >= MAX_CLAIMS_PER_FRAME {
+            return set.len() as u32;
+        }
         let dominated = set
             .iter()
             .any(|c| pocp::jaccard(&pocp::div_sketch_to_cell(c), &new_cell) >= tau);

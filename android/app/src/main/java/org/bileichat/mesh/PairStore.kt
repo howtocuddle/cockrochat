@@ -1,4 +1,4 @@
-package org.cockroachat.mesh
+package org.bileichat.mesh
 
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
@@ -110,9 +110,19 @@ object PairStore {
         return out
     }
 
+    /** Per-pairing salt length. MUST match the `[u8; 32]` that `pair_seed_v2` requires
+     *  (ffi.rs) — this was 16, so pairSeedV2 rejected every salt, returned null, and EVERY
+     *  v2 QR scan failed with "Derivation failed". Only raw-hex / v1 payloads could pair,
+     *  silently downgrading users to the static non-forward-secret key. */
+    private const val PAIR_SALT_LEN = 32
+
+    /** Epochs to backdate a new v2 contact's ratchet start, so two phones that scan each
+     *  other seconds apart still have overlapping key windows. See addContact. */
+    private const val PAIR_EPOCH_BACKDATE = 3u
+
     private fun myPairSalt(ctx: Context): ByteArray {
         mySalt?.let { return it }
-        val s = ByteArray(16)
+        val s = ByteArray(PAIR_SALT_LEN)
         SecureRandom().nextBytes(s)
         mySalt = s
         return s
@@ -126,7 +136,7 @@ object PairStore {
      * keys never leave the device. The salt is fresh per pairing and rotated after each add.
      */
     fun qrPayload(ctx: Context): String =
-        "cockroachat:key:v2:${myPublicHex(ctx)}:${myPairSalt(ctx).toHex()}"
+        "bileichat:key:v2:${myPublicHex(ctx)}:${myPairSalt(ctx).toHex()}"
 
     fun mySaltHex(ctx: Context): String = myPairSalt(ctx).toHex()
 
@@ -135,15 +145,16 @@ object PairStore {
         val trimmed = value.trim()
         val parts = trimmed.split(":")
         return when {
-            parts.size == 5 && parts[0].equals("cockroachat", true) &&
+            parts.size == 5 && parts[0].equals("bileichat", true) &&
                 parts[1].equals("key", true) && parts[2] == "v2" -> {
                 val pk = parts[3]
                 val salt = parts[4]
                 if (pk.length == 64 && pk.hexToBytesOrNull()?.size == 32 &&
-                    salt.length == 32 && salt.hexToBytesOrNull()?.size == 16
+                    salt.length == PAIR_SALT_LEN * 2 &&
+                    salt.hexToBytesOrNull()?.size == PAIR_SALT_LEN
                 ) PairingOffer(pk, salt) else null
             }
-            parts.size == 4 && parts[0].equals("cockroachat", true) &&
+            parts.size == 4 && parts[0].equals("bileichat", true) &&
                 parts[1].equals("key", true) && parts[2] == "v1" -> {
                 val pk = parts[3]
                 if (pk.length == 64 && pk.hexToBytesOrNull()?.size == 32) PairingOffer(pk, null) else null
@@ -227,24 +238,36 @@ object PairStore {
     }
 
     @Synchronized
-    fun addContact(ctx: Context, label: String, offerRaw: String): Boolean {
+    fun addContact(ctx: Context, label: String, offerRaw: String): String? {
         val trimmedLabel = label.trim()
-        if (trimmedLabel.isEmpty()) return false
-        if (trimmedLabel.any { it == '\t' || it == '\n' || it == '\r' }) return false
-        if (trimmedLabel.length > 32) return false
-        val offer = parsePairingOffer(offerRaw) ?: return false
-        val peerPub = offer.pkHex.hexToBytesOrNull() ?: return false
-        if (peerPub.size != 32) return false
+        if (trimmedLabel.isEmpty()) return "Contact name cannot be empty"
+        if (trimmedLabel.any { it == '\t' || it == '\n' || it == '\r' }) return "Contact name contains invalid characters"
+        if (trimmedLabel.length > 32) return "Contact name too long (max 32 chars)"
+        val offer = parsePairingOffer(offerRaw) ?: return "Invalid pairing key format"
+        val peerPub = offer.pkHex.hexToBytesOrNull() ?: return "Invalid public key"
+        if (peerPub.size != 32) return "Invalid public key size"
         // D5: pairing with ourselves is never valid.
-        if (offer.pkHex.equals(myPublicHex(ctx), ignoreCase = true)) return false
+        if (offer.pkHex.equals(myPublicHex(ctx), ignoreCase = true)) return "Pairing with your own key is not allowed"
 
-        val shared = uniffi.mesh_core.pairDerive(secret(ctx), peerPub) ?: return false
+        val shared = uniffi.mesh_core.pairDerive(secret(ctx), peerPub) ?: return "Key agreement failed"
         val contact = if (offer.saltHex != null) {
             // v2: chain seed = f(ECDH, both salts). Salts are NOT stored — after this call
             // only the ratchet chain state survives, which is what gives seizure resistance.
-            val theirSalt = offer.saltHex.hexToBytesOrNull() ?: return false
-            val seed0 = uniffi.mesh_core.pairSeedV2(shared, myPairSalt(ctx), theirSalt) ?: return false
-            Contact(trimmedLabel, seed0, v2 = true, chainEpoch = currentEpoch())
+            val theirSalt = offer.saltHex.hexToBytesOrNull() ?: return "Invalid salt"
+            val seed0 = uniffi.mesh_core.pairSeedV2(shared, myPairSalt(ctx), theirSalt) ?: return "Derivation failed"
+            // Backdate the chain start. The two sides scan each other seconds apart, so each
+            // stamped its OWN local epoch: if Alice landed on epoch 100 and Bob on 102, a
+            // message Alice sent at 101 fell into candidateKeys' `else -> emptyList()` branch
+            // on Bob (101 != 102, no prevKey, 101 < 102) and was undecryptable forever, with
+            // no log line. Starting the chain a few epochs back makes the two windows overlap;
+            // ratcheting forward from there is one BLAKE3 step per epoch.
+            val start = currentEpoch()
+            Contact(
+                trimmedLabel,
+                seed0,
+                v2 = true,
+                chainEpoch = if (start >= PAIR_EPOCH_BACKDATE) start - PAIR_EPOCH_BACKDATE else 0u
+            )
         } else {
             // Legacy v1: static key, no forward secrecy (shown as LEGACY in the UI).
             Contact(trimmedLabel, shared, v2 = false)
@@ -263,7 +286,7 @@ object PairStore {
         // on add would break sequential face-to-face pairing (the second scanner would get
         // a different salt than the one they scanned). The salt is per-process only and
         // never persisted, which is what preserves forward secrecy after process death.
-        return true
+        return null
     }
 
     @Synchronized
@@ -322,7 +345,60 @@ object PairStore {
                 uniffi.mesh_core.pairRatchet(contact.pairKey, contact.chainEpoch, frameEpoch)
                     ?.let { listOf(it) } ?: emptyList()
             }
-            else -> emptyList() // older than the retained previous epoch: undecryptable by design
+            else -> {
+                // Older than the retained previous epoch: undecryptable by design (forward
+                // secrecy — those keys are gone). Logged because it is otherwise completely
+                // silent, and it is what a pairing-epoch mismatch looks like from here.
+                // Contact label deliberately omitted: the debug log is exportable, and a
+                // line naming who you are paired with is social-graph metadata that a
+                // seized or shared export would hand over for free.
+                MeshState.logDebug(
+                    "private frame at epoch $frameEpoch is behind that contact's chain " +
+                        "(${contact.chainEpoch}) — key already ratcheted away, cannot open"
+                )
+                emptyList()
+            }
+        }
+    }
+
+    /**
+     * Step every v2 contact's chain forward with the clock. Called once per epoch by the
+     * service loop.
+     *
+     * `pair_ratchet` refuses spans longer than 8192 steps (a DoS bound on wire-supplied
+     * epochs), but chains only ever advanced ON USE — the sender in [keyForSend], the
+     * receiver in [noteOpened]. Two people who paired and then exchanged no private message
+     * for 8192 epochs (22.8 h at a 10 s epoch — i.e. pairing the night before and first
+     * using it the next day) blew that cap in both directions simultaneously: every send
+     * failed with "key ratchet failed", every receive with "already ratcheted away". Since
+     * neither path can advance the chain without first succeeding, it never recovered —
+     * private messaging was permanently dead until the pair met again in person.
+     *
+     * Advancing to `epoch - 1` rather than `epoch` deliberately keeps the retained window
+     * aligned with the ±2-epoch freshness gate: chainEpoch covers epoch-1, prevEpoch covers
+     * epoch-2, and a current-epoch frame is one cheap on-the-fly step ahead in
+     * [candidateKeys]. Forward secrecy is unchanged — superseded keys are still dropped.
+     */
+    @Synchronized
+    fun fastForwardChains(ctx: Context, epoch: UInt) {
+        if (epoch == 0u) return
+        val target = epoch - 1u
+        for (c in contacts(ctx)) {
+            if (!c.v2 || target <= c.chainEpoch) continue
+            val advanced = uniffi.mesh_core.pairRatchet(c.pairKey, c.chainEpoch, target)
+            if (advanced == null) {
+                MeshState.logDebug(
+                    "chain fast-forward for '" + c.label + "' failed: span " +
+                        (target - c.chainEpoch) + " epochs exceeds the ratchet cap"
+                )
+                continue
+            }
+            storeUpdated(ctx, c.copy(
+                pairKey = advanced,
+                chainEpoch = target,
+                prevKey = c.pairKey,
+                prevEpoch = c.chainEpoch
+            ))
         }
     }
 

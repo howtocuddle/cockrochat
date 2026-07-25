@@ -17,6 +17,24 @@ use std::collections::{HashMap, VecDeque};
 /// legitimate hashes of the other live epochs (replay/eviction-window mitigation).
 pub const EPOCH_BUCKET_CAP: usize = 1024;
 
+/// Outcome of a dedup admission check.
+///
+/// P-DoS: the old API collapsed all three cases into `bool`, so the shim could not tell
+/// "already seen" from "this epoch's bucket is full". Once 1024 distinct frames carrying one
+/// epoch had been ingested, every further frame stamped with that epoch was refused and the
+/// caller treated it as a duplicate — no display, no relay, no measurement, for the rest of
+/// the epoch. Signing 1024 frames is milliseconds of work, so an anti-eviction mitigation
+/// doubled as a complete per-epoch silencing DoS. Callers must now distinguish the cases.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DedupVerdict {
+    /// Not seen before, and admissible.
+    Fresh,
+    /// Already present in the set.
+    Duplicate,
+    /// Not seen before, but this epoch's bucket is at [`EPOCH_BUCKET_CAP`].
+    BucketFull,
+}
+
 /// Bounded FIFO-evicting dedup set with time-decaying epoch awareness (E4).
 ///
 /// Stores up to `cap` frame (hash, epoch) pairs.  When the set is full and a new hash arrives,
@@ -65,6 +83,25 @@ impl Dedup {
     ///
     /// Then, if the set is already at `cap`, the single oldest entry is evicted (FIFO).
     pub fn check_and_insert_epoch(&mut self, hash: [u8; 16], epoch: u32) -> bool {
+        match self.check_epoch(hash, epoch) {
+            DedupVerdict::Fresh => {
+                self.insert_epoch(hash, epoch);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Admission check WITHOUT inserting. Runs the time-decay purge, then reports whether
+    /// `hash` is fresh, a duplicate, or blocked by the per-epoch sub-cap.
+    ///
+    /// Split out from [`check_and_insert_epoch`] so the shim can defer the insert until it
+    /// has actually acted on the frame. Marking a frame seen before deciding whether to
+    /// display it meant a frame that transiently failed verification (e.g. an empty local
+    /// sketch at the start of an epoch) was suppressed for the whole ~3-epoch dedup window:
+    /// every retransmission of those exact bytes hit the seen-set and was dropped, so the
+    /// loss could never self-heal.
+    pub fn check_epoch(&mut self, hash: [u8; 16], epoch: u32) -> DedupVerdict {
         // Purge entries older than epoch-2 (time-decaying eviction).
         // Entries with epoch 0 (legacy sentinel) are skipped so old callers that don't
         // supply epoch don't get unexpected eviction.
@@ -81,12 +118,26 @@ impl Dedup {
             }
         }
 
-        // Check for duplicate.
         if self.seen.contains_key(&hash) {
-            return false;
+            return DedupVerdict::Duplicate;
         }
 
         // C8: per-epoch sub-cap — refuse without evicting other epochs' entries.
+        if epoch != 0 && self.epoch_counts.get(&epoch).copied().unwrap_or(0) >= EPOCH_BUCKET_CAP {
+            return DedupVerdict::BucketFull;
+        }
+
+        DedupVerdict::Fresh
+    }
+
+    /// Insert `hash` into the seen set, evicting the oldest entry if at capacity.
+    /// Returns `false` if the hash was already present or the epoch bucket is full.
+    /// Call after [`check_epoch`] has returned [`DedupVerdict::Fresh`] and the frame has
+    /// been acted on.
+    pub fn insert_epoch(&mut self, hash: [u8; 16], epoch: u32) -> bool {
+        if self.seen.contains_key(&hash) {
+            return false;
+        }
         if epoch != 0 && self.epoch_counts.get(&epoch).copied().unwrap_or(0) >= EPOCH_BUCKET_CAP {
             return false;
         }
@@ -94,10 +145,9 @@ impl Dedup {
         // Cap-based eviction (FIFO).
         if self.order.len() >= self.cap
             && let Some(oldest) = self.order.pop_front()
+            && let Some(oldest_epoch) = self.seen.remove(&oldest)
         {
-            if let Some(oldest_epoch) = self.seen.remove(&oldest) {
-                self.decrement_bucket(oldest_epoch);
-            }
+            self.decrement_bucket(oldest_epoch);
         }
 
         self.seen.insert(hash, epoch);
@@ -210,13 +260,102 @@ pub fn relay_decision(buf: &[u8; FRAME_LEN]) -> Option<[u8; FRAME_LEN]> {
 
 #[cfg(test)]
 mod tests {
-    use super::{relay_decision, relay_decision_with_difficulty, Dedup};
+    use super::{
+        relay_decision, relay_decision_with_difficulty, Dedup, DedupVerdict, EPOCH_BUCKET_CAP,
+    };
     use crate::codec::{self, MsgType, FRAME_LEN};
     use crate::crypto;
     use crate::message;
 
     fn hash(tag: u8) -> [u8; 16] {
         [tag; 16]
+    }
+
+    /// Distinct 16-byte hash from a counter (for bucket-cap tests).
+    fn hash_n(n: u32) -> [u8; 16] {
+        let mut h = [0u8; 16];
+        h[..4].copy_from_slice(&n.to_be_bytes());
+        h
+    }
+
+    // ---- check_epoch / insert_epoch split (deferred-insert support) ----
+
+    #[test]
+    fn check_epoch_does_not_insert() {
+        let mut d = Dedup::new(8);
+        assert_eq!(d.check_epoch(hash(1), 5), DedupVerdict::Fresh);
+        // Checking must not consume the hash — this is the point of the split: the shim
+        // decides whether to display/relay BEFORE marking the frame seen.
+        assert_eq!(d.check_epoch(hash(1), 5), DedupVerdict::Fresh);
+        assert!(d.insert_epoch(hash(1), 5));
+        assert_eq!(d.check_epoch(hash(1), 5), DedupVerdict::Duplicate);
+    }
+
+    #[test]
+    fn deferred_insert_lets_a_transient_failure_retry() {
+        // Models the real bug: the first copy of a frame arrives, cannot be judged (no local
+        // sketch yet), and is NOT inserted. A retransmission must still be admissible.
+        let mut d = Dedup::new(8);
+        assert_eq!(d.check_epoch(hash(7), 3), DedupVerdict::Fresh);
+        // ... verification was inconclusive, so no insert_epoch call ...
+        assert_eq!(
+            d.check_epoch(hash(7), 3),
+            DedupVerdict::Fresh,
+            "retry must still be eligible"
+        );
+        // Second time it verifies and is acted on.
+        assert!(d.insert_epoch(hash(7), 3));
+        assert_eq!(d.check_epoch(hash(7), 3), DedupVerdict::Duplicate);
+    }
+
+    #[test]
+    fn check_and_insert_epoch_still_atomic() {
+        let mut d = Dedup::new(8);
+        assert!(d.check_and_insert_epoch(hash(2), 9));
+        assert!(!d.check_and_insert_epoch(hash(2), 9));
+    }
+
+    // ---- C8 per-epoch sub-cap must be distinguishable from a duplicate ----
+
+    #[test]
+    fn bucket_full_is_reported_distinctly_from_duplicate() {
+        let mut d = Dedup::new(EPOCH_BUCKET_CAP * 4);
+        let epoch = 42u32;
+        for i in 0..EPOCH_BUCKET_CAP {
+            assert!(d.insert_epoch(hash_n(i as u32), epoch), "fill slot {i}");
+        }
+        // A FRESH, never-seen hash in a full bucket must report BucketFull, not Duplicate.
+        // Collapsing the two into `false` is what turned an anti-eviction mitigation into a
+        // silent per-epoch blackout: the shim read the refusal as "already handled".
+        let verdict = d.check_epoch(hash_n(0xFFFF), epoch);
+        assert_eq!(verdict, DedupVerdict::BucketFull);
+        assert_ne!(verdict, DedupVerdict::Duplicate);
+
+        // A different epoch is unaffected — the sub-cap is per bucket.
+        assert_eq!(d.check_epoch(hash_n(0xFFFF), epoch + 1), DedupVerdict::Fresh);
+    }
+
+    #[test]
+    fn epoch_decay_frees_a_full_bucket() {
+        let mut d = Dedup::new(EPOCH_BUCKET_CAP * 4);
+        let epoch = 100u32;
+        for i in 0..EPOCH_BUCKET_CAP {
+            assert!(d.insert_epoch(hash_n(i as u32), epoch));
+        }
+        assert_eq!(d.check_epoch(hash_n(0xAAAA), epoch), DedupVerdict::BucketFull);
+        // Three epochs on, the old bucket decays out of the window, so the blackout is
+        // bounded in time rather than permanent.
+        assert_eq!(d.check_epoch(hash_n(0xAAAA), epoch + 3), DedupVerdict::Fresh);
+    }
+
+    #[test]
+    fn epoch_decay_evicts_entries_older_than_two_epochs() {
+        let mut d = Dedup::new(64);
+        assert!(d.check_and_insert_epoch(hash(1), 10));
+        // Still inside the ~3-epoch window.
+        assert!(!d.check_and_insert_epoch(hash(1), 12));
+        // Beyond it: purged, so the hash is fresh again.
+        assert!(d.check_and_insert_epoch(hash(1), 13));
     }
 
     #[test]

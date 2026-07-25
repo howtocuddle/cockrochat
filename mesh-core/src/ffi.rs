@@ -129,8 +129,14 @@ pub fn make_message_frame_with_witness(
 }
 
 /// Relay a received frame: decrement the TTL at byte 214 and return the modified buffer, or
-/// `None` if the frame should be dropped (bad length, decode error, LocalImmediate type, or
-/// TTL already 0). The returned buffer is safe to rebroadcast verbatim; the signature is intact.
+/// `None` if the frame should be dropped (bad length, decode error, or TTL already 0).
+/// The returned buffer is safe to rebroadcast verbatim; the signature is intact.
+///
+/// LocalImmediate IS relayed — exactly once, with its TTL clobbered to 0 so the copy cannot
+/// be relayed again. That single reflected hop is the delivery-receipt mechanism
+/// (send-and-listen): the originator hears its own frame come back. This doc previously
+/// claimed LocalImmediate was dropped, which would make both receipts and local propagation
+/// impossible; the code has always relayed it (see `statemachine::relay_decision`).
 #[uniffi::export]
 pub fn relay_frame(bytes: Vec<u8>) -> Option<Vec<u8>> {
     let buf: [u8; FRAME_LEN] = bytes.as_slice().try_into().ok()?;
@@ -211,7 +217,7 @@ impl FfiDedup {
         };
         self.inner
             .lock()
-            .expect("mutex not poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .check_and_insert(hash)
     }
 
@@ -225,8 +231,53 @@ impl FfiDedup {
         };
         self.inner
             .lock()
-            .expect("mutex not poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .check_and_insert_epoch(hash, epoch)
+    }
+
+    /// Admission check WITHOUT inserting. See [`crate::statemachine::Dedup::check_epoch`].
+    /// A hash of the wrong length reports `Duplicate` (drop it — it can never be valid).
+    pub fn check_epoch(&self, hash: Vec<u8>, epoch: u32) -> FfiDedupVerdict {
+        let hash: [u8; 16] = match hash.as_slice().try_into() {
+            Ok(h) => h,
+            Err(_) => return FfiDedupVerdict::Duplicate,
+        };
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .check_epoch(hash, epoch)
+            .into()
+    }
+
+    /// Insert a hash the caller has finished acting on. Returns false on a wrong-length
+    /// hash, an already-present hash, or a full epoch bucket.
+    pub fn insert_epoch(&self, hash: Vec<u8>, epoch: u32) -> bool {
+        let hash: [u8; 16] = match hash.as_slice().try_into() {
+            Ok(h) => h,
+            Err(_) => return false,
+        };
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert_epoch(hash, epoch)
+    }
+}
+
+/// Wire form of [`crate::statemachine::DedupVerdict`] for the shim.
+#[derive(uniffi::Enum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FfiDedupVerdict {
+    Fresh,
+    Duplicate,
+    BucketFull,
+}
+
+impl From<crate::statemachine::DedupVerdict> for FfiDedupVerdict {
+    fn from(v: crate::statemachine::DedupVerdict) -> Self {
+        match v {
+            crate::statemachine::DedupVerdict::Fresh => FfiDedupVerdict::Fresh,
+            crate::statemachine::DedupVerdict::Duplicate => FfiDedupVerdict::Duplicate,
+            crate::statemachine::DedupVerdict::BucketFull => FfiDedupVerdict::BucketFull,
+        }
     }
 }
 
@@ -268,7 +319,7 @@ impl FfiTrust {
         };
         self.inner
             .lock()
-            .expect("mutex not poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .record(fh, ds, tau)
     }
 
@@ -281,7 +332,7 @@ impl FfiTrust {
         };
         self.inner
             .lock()
-            .expect("mutex not poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .distinct_count(&fh)
     }
 }
@@ -638,7 +689,7 @@ impl BeaconFfi {
             Err(_) => return false,
         };
         let ent = beacon::Entropy(e_bytes);
-        let mut inner = self.inner.lock().expect("mutex not poisoned");
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         match beacon::advance(&inner, &ent, now_ms, floor_ms) {
             Some(next) => {
                 *inner = next;
@@ -651,7 +702,7 @@ impl BeaconFfi {
     /// Fallback advance: chain with zero external entropy.
     /// Returns true if the chain advanced, false if within the floor.
     pub fn advance_fallback(&self, now_ms: u64, floor_ms: u64) -> bool {
-        let mut inner = self.inner.lock().expect("mutex not poisoned");
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         match beacon::fallback_local(&inner, now_ms, floor_ms) {
             Some(next) => {
                 *inner = next;
@@ -663,17 +714,17 @@ impl BeaconFfi {
 
     /// Current 32-byte beacon seed. Feed this into `make_message_frame` et al.
     pub fn seed(&self) -> Vec<u8> {
-        self.inner.lock().expect("mutex not poisoned").seed.to_vec()
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).seed.to_vec()
     }
 
     /// Whether the beacon is in low-entropy mode (no neighbors heard).
     pub fn is_low_entropy(&self) -> bool {
-        self.inner.lock().expect("mutex not poisoned").low_entropy
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).low_entropy
     }
 
     /// Current beacon epoch number. Not used for frame epoch (wall clock handles that).
     pub fn epoch(&self) -> u32 {
-        self.inner.lock().expect("mutex not poisoned").epoch
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).epoch
     }
 
     /// Zero the live beacon seed and reset the chain (C7 panic-wipe gap). Previously only a
@@ -681,7 +732,7 @@ impl BeaconFfi {
     /// After this call the object is sterile: `seed()` returns zeros and further `advance`
     /// calls build a chain unrelated to anything broadcast before the wipe.
     pub fn wipe(&self) {
-        let mut inner = self.inner.lock().expect("mutex not poisoned");
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         inner.seed = [0u8; 32];
         inner.epoch = 0;
         inner.last_advance_ms = 0;

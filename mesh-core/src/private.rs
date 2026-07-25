@@ -42,10 +42,18 @@ fn nonce_suffix(sender_pk: &[u8; 32], counter: u64) -> [u8; 8] {
 }
 
 /// Build the 12-byte AEAD nonce from epoch, sender pubkey, and counter.
+///
+/// The counter is truncated to its low 32 bits FIRST, because that is all the wire carries
+/// (`div_sketch[4..8]`, written by `message::make_private_frame`). Sealing hashed the full
+/// u64 while opening reconstructed only the low 32 bits, so any counter at or above 2^32
+/// produced a different nonce on each side and could never be decrypted — it sealed and
+/// transmitted happily, then failed to open forever. Unreachable from the current shim,
+/// which masks to 32 bits, but the public API documents this counter as a u64 and so invited
+/// exactly that value.
 fn nonce_for(epoch: u32, sender_pk: &[u8; 32], counter: u64) -> [u8; 12] {
     let mut n = [0u8; 12];
     n[..4].copy_from_slice(&epoch.to_be_bytes());
-    n[4..].copy_from_slice(&nonce_suffix(sender_pk, counter));
+    n[4..].copy_from_slice(&nonce_suffix(sender_pk, counter as u32 as u64));
     n
 }
 

@@ -757,6 +757,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_mesh_core_checksum_method_ffidedup_check_and_insert_epoch(
     ): Int
+    external fun uniffi_mesh_core_checksum_method_ffidedup_check_epoch(
+    ): Int
+    external fun uniffi_mesh_core_checksum_method_ffidedup_insert_epoch(
+    ): Int
     external fun uniffi_mesh_core_checksum_method_ffitrust_distinct_count(
     ): Int
     external fun uniffi_mesh_core_checksum_method_ffitrust_record_verification(
@@ -812,6 +816,10 @@ internal object UniffiLib {
     external fun uniffi_mesh_core_fn_method_ffidedup_check_and_insert(`ptr`: Long,`hash`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     external fun uniffi_mesh_core_fn_method_ffidedup_check_and_insert_epoch(`ptr`: Long,`hash`: RustBuffer.ByValue,`epoch`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_mesh_core_fn_method_ffidedup_check_epoch(`ptr`: Long,`hash`: RustBuffer.ByValue,`epoch`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_method_ffidedup_insert_epoch(`ptr`: Long,`hash`: RustBuffer.ByValue,`epoch`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     external fun uniffi_mesh_core_fn_clone_ffitrust(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
@@ -1097,7 +1105,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_mesh_core_checksum_func_pocp_witness() != 53845) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_mesh_core_checksum_func_relay_frame() != 31977) {
+    if (lib.uniffi_mesh_core_checksum_func_relay_frame() != 31194) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_func_vdl_check_frame() != 19982) {
@@ -1134,6 +1142,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_method_ffidedup_check_and_insert_epoch() != 62913) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_method_ffidedup_check_epoch() != 2331) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_mesh_core_checksum_method_ffidedup_insert_epoch() != 9674) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_method_ffitrust_distinct_count() != 24381) {
@@ -2054,6 +2068,18 @@ public interface FfiDedupInterface {
      */
     fun `checkAndInsertEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt): kotlin.Boolean
     
+    /**
+     * Admission check WITHOUT inserting. See [`crate::statemachine::Dedup::check_epoch`].
+     * A hash of the wrong length reports `Duplicate` (drop it — it can never be valid).
+     */
+    fun `checkEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt): FfiDedupVerdict
+    
+    /**
+     * Insert a hash the caller has finished acting on. Returns false on a wrong-length
+     * hash, an already-present hash, or a full epoch bucket.
+     */
+    fun `insertEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt): kotlin.Boolean
+    
     companion object
 }
 
@@ -2202,6 +2228,44 @@ open class FfiDedup: Disposable, AutoCloseable, FfiDedupInterface
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_mesh_core_fn_method_ffidedup_check_and_insert_epoch(
+        it,
+        
+        FfiConverterByteArray.lower(`hash`),
+        FfiConverterUInt.lower(`epoch`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Admission check WITHOUT inserting. See [`crate::statemachine::Dedup::check_epoch`].
+     * A hash of the wrong length reports `Duplicate` (drop it — it can never be valid).
+     */override fun `checkEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt): FfiDedupVerdict {
+            return FfiConverterTypeFfiDedupVerdict.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_method_ffidedup_check_epoch(
+        it,
+        
+        FfiConverterByteArray.lower(`hash`),
+        FfiConverterUInt.lower(`epoch`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Insert a hash the caller has finished acting on. Returns false on a wrong-length
+     * hash, an already-present hash, or a full epoch bucket.
+     */override fun `insertEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_method_ffidedup_insert_epoch(
         it,
         
         FfiConverterByteArray.lower(`hash`),
@@ -2646,6 +2710,44 @@ public object FfiConverterTypeWitnessParts: FfiConverterRustBuffer<WitnessParts>
             FfiConverterByteArray.write(value.`bodyHash`, buf)
     }
 }
+
+
+
+/**
+ * Wire form of [`crate::statemachine::DedupVerdict`] for the shim.
+ */
+
+enum class FfiDedupVerdict {
+    
+    FRESH,
+    DUPLICATE,
+    BUCKET_FULL;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFfiDedupVerdict: FfiConverterRustBuffer<FfiDedupVerdict> {
+    override fun read(buf: ByteBuffer) = try {
+        FfiDedupVerdict.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: FfiDedupVerdict) = 4UL
+
+    override fun write(value: FfiDedupVerdict, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 
@@ -3401,8 +3503,14 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
 
         /**
          * Relay a received frame: decrement the TTL at byte 214 and return the modified buffer, or
-         * `None` if the frame should be dropped (bad length, decode error, LocalImmediate type, or
-         * TTL already 0). The returned buffer is safe to rebroadcast verbatim; the signature is intact.
+         * `None` if the frame should be dropped (bad length, decode error, or TTL already 0).
+         * The returned buffer is safe to rebroadcast verbatim; the signature is intact.
+         *
+         * LocalImmediate IS relayed — exactly once, with its TTL clobbered to 0 so the copy cannot
+         * be relayed again. That single reflected hop is the delivery-receipt mechanism
+         * (send-and-listen): the originator hears its own frame come back. This doc previously
+         * claimed LocalImmediate was dropped, which would make both receipts and local propagation
+         * impossible; the code has always relayed it (see `statemachine::relay_decision`).
          */ fun `relayFrame`(`bytes`: kotlin.ByteArray): kotlin.ByteArray? {
             return FfiConverterOptionalByteArray.lift(
     uniffiRustCall() { _status ->
