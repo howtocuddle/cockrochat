@@ -373,10 +373,6 @@ This glossary explains technical terms and protocol concepts used throughout `bi
 
 ---
 
-## Naming
-
-The project repository is named **cockroachat** — a reference to the cockroach's legendary resilience. The application itself is branded **bileichat** in the code, build system (`org.bileichat.mesh`), and APK artifacts.
-
 ---
 
 ## License
@@ -386,5 +382,5 @@ The project repository is named **cockroachat** — a reference to the cockroach
 ---
 
 <div align="center">
-<sub>Built for human safety and free expression. No accounts. No servers. No internet. Just mesh.</sub>
+<sub>Built for human safety and free expression. No accounts. No servers. No internet. </sub>
 </div>
