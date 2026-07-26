@@ -44,7 +44,7 @@ The protocol uses a 3-tier messaging model to balance latency, crowd coverage, a
 
 ```
 +───────────────────────────────────────────────────────────────────────────────+
-│                       3-Tier Messaging Architecture                         │
+│                       3-Tier Messaging Architecture                           │
 +───────────────────────────────────────────────────────────────────────────────+
 
   Tier 1: Immediate Local Broadcast (~30m Radius)
