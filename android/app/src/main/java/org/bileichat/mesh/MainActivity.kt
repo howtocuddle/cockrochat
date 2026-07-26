@@ -3,6 +3,7 @@ package org.bileichat.mesh
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -182,6 +183,26 @@ class MainActivity : ComponentActivity() {
 
         override fun clearLog() { MeshState.debugLog.value = emptyList() }
 
+        override fun runSelfTest() {
+            if (!MeshState.running.value) {
+                // The report reads live radio, GATT and cell state, so a run against a stopped
+                // service would report a dead radio as a failure and teach nothing.
+                toast("Start the mesh first — the self-test reads live radio state")
+                return
+            }
+            MeshState.selfTestRequests.value += 1
+            toast("Self-test armed — starts at the next epoch boundary")
+        }
+
+        override fun shareSelfTest() {
+            val text = MeshState.selfTestLog.value.joinToString("\n")
+            if (text.isEmpty()) { toast("Run the self-test first"); return }
+            // Contains pairing fingerprints and this epoch's marks — comparable across phones,
+            // which is the point, but also a record of who was nearby.
+            toast("Report contains pairing fingerprints — share carefully")
+            share(text, "bileichat_selftest.txt", "text/plain")
+        }
+
         override fun exportMeasurements() {
             // D6: this file reveals who was physically near this device and when.
             toast("Export contains RF-proximity data — share carefully")
@@ -192,7 +213,16 @@ class MainActivity : ComponentActivity() {
             val sketch = MeshState.stats.value.localSketch
             if (sketch.isEmpty()) { toast("No local sketch yet"); return }
             val cb = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            cb.setPrimaryClip(ClipData.newPlainText("mesh_sketch", sketch.joinToString(" ") { it.toString() }))
+            val clip = ClipData.newPlainText("mesh_sketch", sketch.joinToString(" ") { it.toString() })
+            // The sketch is a digest of who is physically nearby. Android 13+ shows a preview
+            // of copied text in a system toast and lets other apps read the clipboard; marking
+            // it sensitive suppresses the preview and hints that it should not be retained.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                clip.description.extras = android.os.PersistableBundle().apply {
+                    putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+                }
+            }
+            cb.setPrimaryClip(clip)
             toast("Sketch copied")
         }
 
@@ -219,18 +249,28 @@ class MainActivity : ComponentActivity() {
             // Set text first, then bump — the service collects both, so an identical re-send
             // still re-originates instead of being conflated away.
             MeshState.outgoingRevision.value += 1
+            val ts = System.currentTimeMillis()
+            MeshState.outgoingRowTs = ts
             MeshState.appendMessage(
                 MsgRow(
-                    tsMs = System.currentTimeMillis(),
+                    tsMs = ts,
                     epoch = 0u,
                     markHexPrefix = "me",
                     rssi = null,
                     text = text,
                     mine = true,
-                    tier = if (MeshState.outgoingTier.value == SendTier.LOCAL) SendTier.LOCAL else SendTier.BROADCAST
+                    tier = if (MeshState.outgoingTier.value == SendTier.LOCAL) SendTier.LOCAL else SendTier.BROADCAST,
+                    sendState = SendState.SENDING
                 )
             )
             return null
+        }
+
+        override fun stopSending() {
+            // Clearing the text is what ends re-origination: the service's collector rebuilds
+            // an empty presence frame and drops outgoingSetAtEpoch.
+            MeshState.outgoingText.value = ""
+            MeshState.receipt.value = "stopped re-sending"
         }
 
         override fun sendPrivate(contact: Contact, text: String): String? {
@@ -241,16 +281,19 @@ class MainActivity : ComponentActivity() {
             // C4: queue (no key material in the queue — the service ratchets at seal time).
             val result = MeshState.privateSends.trySend(PrivateSend(contact.label, text))
             if (result.isFailure) return "Send queue full — wait for the current private send"
+            val ts = System.currentTimeMillis()
+            MeshState.privateRowTs = ts
             MeshState.appendMessage(
                 MsgRow(
-                    tsMs = System.currentTimeMillis(),
+                    tsMs = ts,
                     epoch = 0u,
                     markHexPrefix = "🔒 me→${contact.label}",
                     rssi = null,
                     text = text,
                     mine = true,
                     tier = SendTier.PRIVATE,
-                    contactLabel = contact.label
+                    contactLabel = contact.label,
+                    sendState = SendState.SENDING
                 )
             )
             toast("Sealing (VDL takes a few seconds)…")
@@ -259,13 +302,20 @@ class MainActivity : ComponentActivity() {
 
         override fun contacts(): List<Contact> = PairStore.contacts(this@MainActivity)
 
-        override fun addContact(label: String, keyOrQr: String): String? {
-            val err = PairStore.addContact(this@MainActivity, label, keyOrQr)
+        override fun preparePairing(label: String, keyOrQr: String): PairStore.PairPrepare =
+            PairStore.preparePairing(this@MainActivity, label, keyOrQr)
+
+        override fun commitPairing(pending: PairStore.PendingPairing): String? {
+            val err = PairStore.commitPairing(this@MainActivity, pending)
             if (err == null) {
                 MeshState.contactsVersion.value += 1
-                toast("Paired with ${label.trim()}")
+                toast("Paired with ${pending.contact.label}")
             }
             return err
+        }
+
+        override fun setPairingSessionActive(active: Boolean) {
+            if (active) PairStore.beginPairingSession() else PairStore.endPairingSession()
         }
 
         override fun removeContact(label: String) {

@@ -17,6 +17,14 @@ use std::collections::{HashMap, VecDeque};
 /// legitimate hashes of the other live epochs (replay/eviction-window mitigation).
 pub const EPOCH_BUCKET_CAP: usize = 1024;
 
+/// How far from the LOCAL epoch an entry is retained before time-decay drops it.
+///
+/// This is the replay window. It must comfortably exceed the widest freshness gate a caller
+/// enforces, because once frames older than that gate are admitted, dedup — not the gate — is
+/// what stops them being replayed. The Android shim admits public frames at ±4 epochs, so 6
+/// leaves two epochs of slack on each side.
+pub const DEDUP_RETENTION_EPOCHS: u32 = 6;
+
 /// Outcome of a dedup admission check.
 ///
 /// P-DoS: the old API collapsed all three cases into `bool`, so the shim could not tell
@@ -38,12 +46,18 @@ pub enum DedupVerdict {
 /// Bounded FIFO-evicting dedup set with time-decaying epoch awareness (E4).
 ///
 /// Stores up to `cap` frame (hash, epoch) pairs.  When the set is full and a new hash arrives,
-/// the oldest entry is evicted before insertion.  [`check_and_insert_epoch`] additionally evicts
-/// entries whose epoch is more than 2 behind the provided epoch, providing time-decaying behavior
-/// without relying solely on capacity-based eviction (window of ~3 epochs).
+/// the oldest entry is evicted before insertion.  The epoch-aware entry points additionally
+/// evict entries more than [`DEDUP_RETENTION_EPOCHS`] from the caller's LOCAL epoch.
+///
+/// Two different epochs are in play and they must not be confused:
+///   * the FRAME epoch buckets the entry for [`EPOCH_BUCKET_CAP`] accounting — it is
+///     wire-supplied and untrusted;
+///   * the LOCAL epoch drives time-decay — it comes from the caller's own clock, and is the
+///     only one safe to expire state with.
 ///
 /// The plain [`check_and_insert`] delegates with epoch 0 (no epoch-based eviction — only
-/// capacity-based FIFO).  Use [`check_and_insert_epoch`] when the caller has the frame epoch.
+/// capacity-based FIFO); it is for callers with no clock at all, and must not be mixed with
+/// the epoch-aware entry points on the same instance.
 pub struct Dedup {
     /// hash → epoch (fast lookup + epoch metadata for time-decaying eviction).
     seen: HashMap<[u8; 16], u32>,
@@ -68,7 +82,7 @@ impl Dedup {
     /// Returns `true` iff `hash` was NOT seen before (fresh).  Delegates to
     /// [`check_and_insert_epoch`] with `epoch = 0` (no time-decaying eviction).
     pub fn check_and_insert(&mut self, hash: [u8; 16]) -> bool {
-        self.check_and_insert_epoch(hash, 0)
+        self.check_and_insert_epoch(hash, 0, 0)
     }
 
     /// Returns `true` iff `hash` was NOT seen before (fresh).
@@ -82,8 +96,8 @@ impl Dedup {
     /// hashes of other epochs out of the global FIFO.
     ///
     /// Then, if the set is already at `cap`, the single oldest entry is evicted (FIFO).
-    pub fn check_and_insert_epoch(&mut self, hash: [u8; 16], epoch: u32) -> bool {
-        match self.check_epoch(hash, epoch) {
+    pub fn check_and_insert_epoch(&mut self, hash: [u8; 16], epoch: u32, local_epoch: u32) -> bool {
+        match self.check_epoch(hash, epoch, local_epoch) {
             DedupVerdict::Fresh => {
                 self.insert_epoch(hash, epoch);
                 true
@@ -101,15 +115,30 @@ impl Dedup {
     /// sketch at the start of an epoch) was suppressed for the whole ~3-epoch dedup window:
     /// every retransmission of those exact bytes hit the seen-set and was dropped, so the
     /// loss could never self-heal.
-    pub fn check_epoch(&mut self, hash: [u8; 16], epoch: u32) -> DedupVerdict {
-        // Purge entries older than epoch-2 (time-decaying eviction).
-        // Entries with epoch 0 (legacy sentinel) are skipped so old callers that don't
-        // supply epoch don't get unexpected eviction.
+    pub fn check_epoch(&mut self, hash: [u8; 16], epoch: u32, local_epoch: u32) -> DedupVerdict {
+        // Time-decay purge, measured against the LOCAL clock.
+        //
+        // This used to decay against `epoch` — the epoch stamped on the arriving frame, which
+        // is wire-supplied and unvalidated at this layer. One frame claiming a far-future
+        // epoch therefore purged the ENTIRE seen-set in a single call, and every frame
+        // previously marked seen became replayable. The Android shim's freshness gate
+        // contained it in practice, but the core must not hand a caller a primitive whose
+        // replay protection can be cleared by the attacker being protected against, and every
+        // future shim would have had to rediscover that.
+        //
+        // The window is symmetric (abs_diff), which also drops entries stamped far in the
+        // FUTURE. Those cannot be aged out by a forward-moving clock, so under a one-sided
+        // predicate a single bogus future entry sat at the head of the FIFO and blocked the
+        // purge behind it — the queue is insertion-ordered, and this loop stops at the first
+        // entry it must keep. Legitimately-ahead peers stay well inside the window.
         while let Some(oldest_hash) = self.order.front().copied() {
-            // R7: saturating_sub — epochs arrive from the wire; `oldest_epoch + 2` would
-            // overflow on an adversarial u32::MAX epoch (panic in overflow-checked builds).
+            // Entries with epoch 0 (legacy sentinel) are skipped so callers that don't supply
+            // an epoch don't get unexpected eviction.
             match self.seen.get(&oldest_hash) {
-                Some(&oldest_epoch) if oldest_epoch != 0 && epoch.saturating_sub(oldest_epoch) > 2 => {
+                Some(&oldest_epoch)
+                    if oldest_epoch != 0
+                        && local_epoch.abs_diff(oldest_epoch) > DEDUP_RETENTION_EPOCHS =>
+                {
                     self.order.pop_front();
                     self.seen.remove(&oldest_hash);
                     self.decrement_bucket(oldest_epoch);
@@ -261,7 +290,8 @@ pub fn relay_decision(buf: &[u8; FRAME_LEN]) -> Option<[u8; FRAME_LEN]> {
 #[cfg(test)]
 mod tests {
     use super::{
-        relay_decision, relay_decision_with_difficulty, Dedup, DedupVerdict, EPOCH_BUCKET_CAP,
+        relay_decision, relay_decision_with_difficulty, Dedup, DedupVerdict,
+        DEDUP_RETENTION_EPOCHS, EPOCH_BUCKET_CAP,
     };
     use crate::codec::{self, MsgType, FRAME_LEN};
     use crate::crypto;
@@ -283,12 +313,12 @@ mod tests {
     #[test]
     fn check_epoch_does_not_insert() {
         let mut d = Dedup::new(8);
-        assert_eq!(d.check_epoch(hash(1), 5), DedupVerdict::Fresh);
+        assert_eq!(d.check_epoch(hash(1), 5, 5), DedupVerdict::Fresh);
         // Checking must not consume the hash — this is the point of the split: the shim
         // decides whether to display/relay BEFORE marking the frame seen.
-        assert_eq!(d.check_epoch(hash(1), 5), DedupVerdict::Fresh);
+        assert_eq!(d.check_epoch(hash(1), 5, 5), DedupVerdict::Fresh);
         assert!(d.insert_epoch(hash(1), 5));
-        assert_eq!(d.check_epoch(hash(1), 5), DedupVerdict::Duplicate);
+        assert_eq!(d.check_epoch(hash(1), 5, 5), DedupVerdict::Duplicate);
     }
 
     #[test]
@@ -296,23 +326,23 @@ mod tests {
         // Models the real bug: the first copy of a frame arrives, cannot be judged (no local
         // sketch yet), and is NOT inserted. A retransmission must still be admissible.
         let mut d = Dedup::new(8);
-        assert_eq!(d.check_epoch(hash(7), 3), DedupVerdict::Fresh);
+        assert_eq!(d.check_epoch(hash(7), 3, 3), DedupVerdict::Fresh);
         // ... verification was inconclusive, so no insert_epoch call ...
         assert_eq!(
-            d.check_epoch(hash(7), 3),
+            d.check_epoch(hash(7), 3, 3),
             DedupVerdict::Fresh,
             "retry must still be eligible"
         );
         // Second time it verifies and is acted on.
         assert!(d.insert_epoch(hash(7), 3));
-        assert_eq!(d.check_epoch(hash(7), 3), DedupVerdict::Duplicate);
+        assert_eq!(d.check_epoch(hash(7), 3, 3), DedupVerdict::Duplicate);
     }
 
     #[test]
     fn check_and_insert_epoch_still_atomic() {
         let mut d = Dedup::new(8);
-        assert!(d.check_and_insert_epoch(hash(2), 9));
-        assert!(!d.check_and_insert_epoch(hash(2), 9));
+        assert!(d.check_and_insert_epoch(hash(2), 9, 9));
+        assert!(!d.check_and_insert_epoch(hash(2), 9, 9));
     }
 
     // ---- C8 per-epoch sub-cap must be distinguishable from a duplicate ----
@@ -327,12 +357,12 @@ mod tests {
         // A FRESH, never-seen hash in a full bucket must report BucketFull, not Duplicate.
         // Collapsing the two into `false` is what turned an anti-eviction mitigation into a
         // silent per-epoch blackout: the shim read the refusal as "already handled".
-        let verdict = d.check_epoch(hash_n(0xFFFF), epoch);
+        let verdict = d.check_epoch(hash_n(0xFFFF), epoch, epoch);
         assert_eq!(verdict, DedupVerdict::BucketFull);
         assert_ne!(verdict, DedupVerdict::Duplicate);
 
         // A different epoch is unaffected — the sub-cap is per bucket.
-        assert_eq!(d.check_epoch(hash_n(0xFFFF), epoch + 1), DedupVerdict::Fresh);
+        assert_eq!(d.check_epoch(hash_n(0xFFFF), epoch + 1, epoch + 1), DedupVerdict::Fresh);
     }
 
     #[test]
@@ -342,20 +372,62 @@ mod tests {
         for i in 0..EPOCH_BUCKET_CAP {
             assert!(d.insert_epoch(hash_n(i as u32), epoch));
         }
-        assert_eq!(d.check_epoch(hash_n(0xAAAA), epoch), DedupVerdict::BucketFull);
-        // Three epochs on, the old bucket decays out of the window, so the blackout is
-        // bounded in time rather than permanent.
-        assert_eq!(d.check_epoch(hash_n(0xAAAA), epoch + 3), DedupVerdict::Fresh);
+        assert_eq!(d.check_epoch(hash_n(0xAAAA), epoch, epoch), DedupVerdict::BucketFull);
+        // Once the LOCAL clock has moved past the retention window the old bucket decays out,
+        // so the blackout is bounded in time rather than permanent.
+        let past = epoch + DEDUP_RETENTION_EPOCHS + 1;
+        assert_eq!(d.check_epoch(hash_n(0xAAAA), past, past), DedupVerdict::Fresh);
     }
 
     #[test]
-    fn epoch_decay_evicts_entries_older_than_two_epochs() {
+    fn epoch_decay_evicts_entries_outside_the_retention_window() {
         let mut d = Dedup::new(64);
-        assert!(d.check_and_insert_epoch(hash(1), 10));
-        // Still inside the ~3-epoch window.
-        assert!(!d.check_and_insert_epoch(hash(1), 12));
-        // Beyond it: purged, so the hash is fresh again.
-        assert!(d.check_and_insert_epoch(hash(1), 13));
+        assert!(d.check_and_insert_epoch(hash(1), 10, 10));
+        // Still inside the window: a replay is caught.
+        let inside = 10 + DEDUP_RETENTION_EPOCHS;
+        assert!(!d.check_and_insert_epoch(hash(1), inside, inside));
+        // Past it: purged, so the hash is admissible again.
+        let outside = 10 + DEDUP_RETENTION_EPOCHS + 1;
+        assert!(d.check_and_insert_epoch(hash(1), outside, outside));
+    }
+
+    /// S8: decay must follow the LOCAL clock, never the arriving frame's epoch.
+    ///
+    /// With the frame's epoch driving the purge, a single frame claiming a far-future epoch
+    /// flushed the entire seen-set, and everything previously marked seen became replayable.
+    /// That is an attacker-triggered reset of the replay protection.
+    #[test]
+    fn a_far_future_frame_cannot_flush_the_seen_set() {
+        let mut d = Dedup::new(64);
+        for i in 0..16u32 {
+            assert!(d.check_and_insert_epoch(hash_n(i), 100, 100));
+        }
+        // A hostile frame stamped absurdly far ahead. Our clock has NOT moved.
+        assert!(d.check_and_insert_epoch(hash_n(999), u32::MAX, 100));
+        // Every earlier hash must still be remembered.
+        for i in 0..16u32 {
+            assert_eq!(
+                d.check_epoch(hash_n(i), 100, 100),
+                DedupVerdict::Duplicate,
+                "hash {i} was forgotten after a far-future frame arrived"
+            );
+        }
+    }
+
+    /// A future-stamped entry cannot be aged out by a forward-moving clock under a one-sided
+    /// predicate, so it sat at the head of the insertion-ordered queue and blocked the purge
+    /// of everything behind it. The window is symmetric to stop that.
+    #[test]
+    fn future_stamped_entries_do_not_block_the_purge() {
+        let mut d = Dedup::new(64);
+        // Arrives first, stamped far in the future (a caller with a looser gate than ours).
+        assert!(d.check_and_insert_epoch(hash(0xEE), 10_000, 100));
+        // Then ordinary traffic.
+        assert!(d.check_and_insert_epoch(hash(0xAB), 100, 100));
+        // Much later: both are outside the window and must be gone, not stuck behind the
+        // future-stamped head of the queue.
+        let later = 100 + DEDUP_RETENTION_EPOCHS + 1;
+        assert_eq!(d.check_epoch(hash(0xAB), later, later), DedupVerdict::Fresh);
     }
 
     #[test]

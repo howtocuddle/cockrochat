@@ -707,8 +707,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_mesh_core_checksum_func_make_private_frame(
     ): Int
-    external fun uniffi_mesh_core_checksum_func_make_test_frame(
-    ): Int
     external fun uniffi_mesh_core_checksum_func_observe_marks(
     ): Int
     external fun uniffi_mesh_core_checksum_func_open_private_body_only(
@@ -720,6 +718,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_mesh_core_checksum_func_pair_public(
     ): Int
     external fun uniffi_mesh_core_checksum_func_pair_ratchet(
+    ): Int
+    external fun uniffi_mesh_core_checksum_func_pair_sas_words(
     ): Int
     external fun uniffi_mesh_core_checksum_func_pair_seed_v2(
     ): Int
@@ -815,9 +815,9 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_mesh_core_fn_method_ffidedup_check_and_insert(`ptr`: Long,`hash`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
-    external fun uniffi_mesh_core_fn_method_ffidedup_check_and_insert_epoch(`ptr`: Long,`hash`: RustBuffer.ByValue,`epoch`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_mesh_core_fn_method_ffidedup_check_and_insert_epoch(`ptr`: Long,`hash`: RustBuffer.ByValue,`epoch`: Int,`localEpoch`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
-    external fun uniffi_mesh_core_fn_method_ffidedup_check_epoch(`ptr`: Long,`hash`: RustBuffer.ByValue,`epoch`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_mesh_core_fn_method_ffidedup_check_epoch(`ptr`: Long,`hash`: RustBuffer.ByValue,`epoch`: Int,`localEpoch`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_method_ffidedup_insert_epoch(`ptr`: Long,`hash`: RustBuffer.ByValue,`epoch`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
@@ -865,8 +865,6 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_make_private_frame(`seed`: RustBuffer.ByValue,`epoch`: Int,`beaconSeed`: RustBuffer.ByValue,`pairKey`: RustBuffer.ByValue,`text`: RustBuffer.ByValue,`counter`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_mesh_core_fn_func_make_test_frame(`seed`: RustBuffer.ByValue,`epoch`: Int,`beaconSeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_observe_marks(`marksFlat`: RustBuffer.ByValue,`rssi`: RustBuffer.ByValue,`seed`: Int,`rssiFloorDbm`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_open_private_body_only(`frame`: RustBuffer.ByValue,`pairKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -878,6 +876,8 @@ internal object UniffiLib {
     external fun uniffi_mesh_core_fn_func_pair_public(`sk`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_pair_ratchet(`key`: RustBuffer.ByValue,`fromEpoch`: Int,`toEpoch`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_mesh_core_fn_func_pair_sas_words(`shared`: RustBuffer.ByValue,`pkA`: RustBuffer.ByValue,`pkB`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_mesh_core_fn_func_pair_seed_v2(`shared`: RustBuffer.ByValue,`saltA`: RustBuffer.ByValue,`saltB`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1069,9 +1069,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_mesh_core_checksum_func_make_private_frame() != 259) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_mesh_core_checksum_func_make_test_frame() != 30816) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_mesh_core_checksum_func_observe_marks() != 28327) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1090,6 +1087,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_mesh_core_checksum_func_pair_ratchet() != 27105) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_mesh_core_checksum_func_pair_sas_words() != 33747) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_mesh_core_checksum_func_pair_seed_v2() != 28039) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1099,7 +1099,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_mesh_core_checksum_func_pocp_sketch_to_div_sketch() != 26269) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_mesh_core_checksum_func_pocp_verify_witness_local() != 24105) {
+    if (lib.uniffi_mesh_core_checksum_func_pocp_verify_witness_local() != 50833) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_func_pocp_witness() != 53845) {
@@ -1141,10 +1141,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_mesh_core_checksum_method_ffidedup_check_and_insert() != 18470) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_mesh_core_checksum_method_ffidedup_check_and_insert_epoch() != 62913) {
+    if (lib.uniffi_mesh_core_checksum_method_ffidedup_check_and_insert_epoch() != 42180) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_mesh_core_checksum_method_ffidedup_check_epoch() != 2331) {
+    if (lib.uniffi_mesh_core_checksum_method_ffidedup_check_epoch() != 43867) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_mesh_core_checksum_method_ffidedup_insert_epoch() != 9674) {
@@ -2062,17 +2062,20 @@ public interface FfiDedupInterface {
     fun `checkAndInsert`(`hash`: kotlin.ByteArray): kotlin.Boolean
     
     /**
-     * Like [`check_and_insert`] but also evicts entries whose epoch is more than 2 behind
-     * the given `epoch` (time-decaying window of ~3 epochs). Use this instead of
-     * [`check_and_insert`] when the caller has the frame's epoch.
+     * Like [`check_and_insert`] but with epoch awareness.
+     *
+     * `epoch` is the FRAME's epoch (untrusted, buckets the entry); `local_epoch` is the
+     * caller's OWN clock and is what drives time-decay. Passing the frame's epoch for both
+     * lets one far-future frame purge the whole seen-set — see
+     * [`crate::statemachine::Dedup::check_epoch`].
      */
-    fun `checkAndInsertEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt): kotlin.Boolean
+    fun `checkAndInsertEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt, `localEpoch`: kotlin.UInt): kotlin.Boolean
     
     /**
      * Admission check WITHOUT inserting. See [`crate::statemachine::Dedup::check_epoch`].
      * A hash of the wrong length reports `Duplicate` (drop it — it can never be valid).
      */
-    fun `checkEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt): FfiDedupVerdict
+    fun `checkEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt, `localEpoch`: kotlin.UInt): FfiDedupVerdict
     
     /**
      * Insert a hash the caller has finished acting on. Returns false on a wrong-length
@@ -2220,10 +2223,13 @@ open class FfiDedup: Disposable, AutoCloseable, FfiDedupInterface
 
     
     /**
-     * Like [`check_and_insert`] but also evicts entries whose epoch is more than 2 behind
-     * the given `epoch` (time-decaying window of ~3 epochs). Use this instead of
-     * [`check_and_insert`] when the caller has the frame's epoch.
-     */override fun `checkAndInsertEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt): kotlin.Boolean {
+     * Like [`check_and_insert`] but with epoch awareness.
+     *
+     * `epoch` is the FRAME's epoch (untrusted, buckets the entry); `local_epoch` is the
+     * caller's OWN clock and is what drives time-decay. Passing the frame's epoch for both
+     * lets one far-future frame purge the whole seen-set — see
+     * [`crate::statemachine::Dedup::check_epoch`].
+     */override fun `checkAndInsertEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt, `localEpoch`: kotlin.UInt): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -2231,7 +2237,8 @@ open class FfiDedup: Disposable, AutoCloseable, FfiDedupInterface
         it,
         
         FfiConverterByteArray.lower(`hash`),
-        FfiConverterUInt.lower(`epoch`),_status)
+        FfiConverterUInt.lower(`epoch`),
+        FfiConverterUInt.lower(`localEpoch`),_status)
 }
     }
     )
@@ -2242,7 +2249,7 @@ open class FfiDedup: Disposable, AutoCloseable, FfiDedupInterface
     /**
      * Admission check WITHOUT inserting. See [`crate::statemachine::Dedup::check_epoch`].
      * A hash of the wrong length reports `Duplicate` (drop it — it can never be valid).
-     */override fun `checkEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt): FfiDedupVerdict {
+     */override fun `checkEpoch`(`hash`: kotlin.ByteArray, `epoch`: kotlin.UInt, `localEpoch`: kotlin.UInt): FfiDedupVerdict {
             return FfiConverterTypeFfiDedupVerdict.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -2250,7 +2257,8 @@ open class FfiDedup: Disposable, AutoCloseable, FfiDedupInterface
         it,
         
         FfiConverterByteArray.lower(`hash`),
-        FfiConverterUInt.lower(`epoch`),_status)
+        FfiConverterUInt.lower(`epoch`),
+        FfiConverterUInt.lower(`localEpoch`),_status)
 }
     }
     )
@@ -2915,6 +2923,38 @@ public object FfiConverterOptionalTypeWitnessParts: FfiConverterRustBuffer<Witne
 /**
  * @suppress
  */
+public object FfiConverterOptionalSequenceString: FfiConverterRustBuffer<List<kotlin.String>?> {
+    override fun read(buf: ByteBuffer): List<kotlin.String>? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterSequenceString.read(buf)
+    }
+
+    override fun allocationSize(value: List<kotlin.String>?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterSequenceString.allocationSize(value)
+        }
+    }
+
+    override fun write(value: List<kotlin.String>?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterSequenceString.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceByte: FfiConverterRustBuffer<List<kotlin.Byte>> {
     override fun read(buf: ByteBuffer): List<kotlin.Byte> {
         val len = buf.getInt()
@@ -2961,6 +3001,34 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterULong.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.String>> {
+    override fun read(buf: ByteBuffer): List<kotlin.String> {
+        val len = buf.getInt()
+        return List<kotlin.String>(len) {
+            FfiConverterString.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<kotlin.String>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterString.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<kotlin.String>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterString.write(it, buf)
         }
     }
 }
@@ -3272,26 +3340,6 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
     
 
         /**
-         * Build a signed test frame from a 32-byte `seed`. Proves encode + crypto across the FFI
-         * boundary from Kotlin/Swift. Returns the 226 B wire frame, or `None` if `seed` is not 32 B.
-         * Smoke-test helper only — real origination goes through the state machine.
-         *
-         * Delegates to `message::make_message_frame` so there is exactly one origination path.
-         */ fun `makeTestFrame`(`seed`: kotlin.ByteArray, `epoch`: kotlin.UInt, `beaconSeed`: kotlin.ByteArray): kotlin.ByteArray? {
-            return FfiConverterOptionalByteArray.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_mesh_core_fn_func_make_test_frame(
-    
-        
-        FfiConverterByteArray.lower(`seed`),
-        FfiConverterUInt.lower(`epoch`),
-        FfiConverterByteArray.lower(`beaconSeed`),_status)
-}
-    )
-    }
-    
-
-        /**
          * Build this device's KMV cell sketch from the marks it overheard this epoch. `marks_flat` is the
          * concatenation of 16-byte marks (trailing partial mark ignored); `rssi[i]` is the dBm of mark `i`;
          * marks below `rssi_floor_dbm` are windowed out. Returns the 16-slot sketch as a `u64` list.
@@ -3399,6 +3447,26 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
     
 
         /**
+         * Short Authentication String for QR pairing, rendered as 4 comparable words (44 bits).
+         *
+         * Both phones display this after key agreement and the users compare it BEFORE the contact
+         * is saved. A man-in-the-middle holds two different shared secrets, so the words differ.
+         * Public keys are order-independent (the core sorts them). `None` on wrong lengths.
+         */ fun `pairSasWords`(`shared`: kotlin.ByteArray, `pkA`: kotlin.ByteArray, `pkB`: kotlin.ByteArray): List<kotlin.String>? {
+            return FfiConverterOptionalSequenceString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_mesh_core_fn_func_pair_sas_words(
+    
+        
+        FfiConverterByteArray.lower(`shared`),
+        FfiConverterByteArray.lower(`pkA`),
+        FfiConverterByteArray.lower(`pkB`),_status)
+}
+    )
+    }
+    
+
+        /**
          * v2 pairing chain seed (A3 forward secrecy). `shared` is the `pair_derive` output;
          * `salt_a`/`salt_b` are the two sides' per-pairing salts (order-independent — the core
          * sorts them). Both sides delete their salts after pairing; the chain seed is then
@@ -3454,10 +3522,17 @@ public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULon
          * Verify a PoCP witness AND check co-presence against the local cell sketch.
          *
          * Returns a verdict code:
-         * - 0: Valid — MAC valid + sketches overlap (Jaccard ≥ tau)
-         * - 1: CellMismatch — MAC valid but sketches don't overlap
+         * - 0: Valid — MAC valid, sketches overlap on ≥ MIN_ATTESTING_OVERLAP, Jaccard ≥ tau
+         * - 1: CellMismatch — MAC valid but the cells do not correspond
          * - 2: Stale — MAC invalid (bad witness or wrong sketch/seed)
+         * - 4: Unattested — MAC valid, cells touch on exactly ONE element. Display, but mark
+         * unverified: this is both what a single-byte forgery looks like and what an honest
+         * just-started phone legitimately claims, and the two are indistinguishable here.
          * - 255: Error — wrong input lengths
+         *
+         * 3 is deliberately skipped: the Android shim uses it as its own "no local sketch for any
+         * candidate bucket" sentinel, which is synthesised above this call and never returned by it.
+         * Reusing it would have made every Unattested frame read as that sentinel.
          *
          * `local_sketch` is 16 u64 values from `observe_marks`. `claimed_div` is 16 bytes
          * from the frame's `div_sketch` field. `frame_prefix` is the first 102 bytes of the

@@ -36,6 +36,12 @@ pub fn frame_decodes(bytes: Vec<u8>) -> bool {
 /// Smoke-test helper only — real origination goes through the state machine.
 ///
 /// Delegates to `message::make_message_frame` so there is exactly one origination path.
+///
+/// Behind `debug_assertions`: no shim calls this, and an exported "make me a signed frame"
+/// entry point is not something a shipped build should carry — it originates with the real
+/// signing seed, so anything able to reach the FFI surface could mint authentic frames
+/// without going through the state machine's gates.
+#[cfg(debug_assertions)]
 #[uniffi::export]
 pub fn make_test_frame(seed: Vec<u8>, epoch: u32, beacon_seed: Vec<u8>) -> Option<Vec<u8>> {
     let seed: &[u8; 32] = seed.as_slice().try_into().ok()?;
@@ -221,10 +227,13 @@ impl FfiDedup {
             .check_and_insert(hash)
     }
 
-    /// Like [`check_and_insert`] but also evicts entries whose epoch is more than 2 behind
-    /// the given `epoch` (time-decaying window of ~3 epochs). Use this instead of
-    /// [`check_and_insert`] when the caller has the frame's epoch.
-    pub fn check_and_insert_epoch(&self, hash: Vec<u8>, epoch: u32) -> bool {
+    /// Like [`check_and_insert`] but with epoch awareness.
+    ///
+    /// `epoch` is the FRAME's epoch (untrusted, buckets the entry); `local_epoch` is the
+    /// caller's OWN clock and is what drives time-decay. Passing the frame's epoch for both
+    /// lets one far-future frame purge the whole seen-set — see
+    /// [`crate::statemachine::Dedup::check_epoch`].
+    pub fn check_and_insert_epoch(&self, hash: Vec<u8>, epoch: u32, local_epoch: u32) -> bool {
         let hash: [u8; 16] = match hash.as_slice().try_into() {
             Ok(h) => h,
             Err(_) => return false,
@@ -232,12 +241,12 @@ impl FfiDedup {
         self.inner
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .check_and_insert_epoch(hash, epoch)
+            .check_and_insert_epoch(hash, epoch, local_epoch)
     }
 
     /// Admission check WITHOUT inserting. See [`crate::statemachine::Dedup::check_epoch`].
     /// A hash of the wrong length reports `Duplicate` (drop it — it can never be valid).
-    pub fn check_epoch(&self, hash: Vec<u8>, epoch: u32) -> FfiDedupVerdict {
+    pub fn check_epoch(&self, hash: Vec<u8>, epoch: u32, local_epoch: u32) -> FfiDedupVerdict {
         let hash: [u8; 16] = match hash.as_slice().try_into() {
             Ok(h) => h,
             Err(_) => return FfiDedupVerdict::Duplicate,
@@ -245,7 +254,7 @@ impl FfiDedup {
         self.inner
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .check_epoch(hash, epoch)
+            .check_epoch(hash, epoch, local_epoch)
             .into()
     }
 
@@ -397,6 +406,13 @@ pub fn frame_epoch(bytes: Vec<u8>) -> Option<u32> {
 /// marks below `rssi_floor_dbm` are windowed out. Returns the 16-slot sketch as a `u64` list.
 #[uniffi::export]
 pub fn observe_marks(marks_flat: Vec<u8>, rssi: Vec<i8>, seed: u32, rssi_floor_dbm: i8) -> Vec<u64> {
+    // Fail closed on malformed input rather than silently building a partial cell. `observe`
+    // zips marks with rssi, so a length mismatch quietly truncates to the shorter of the two
+    // and produces a sketch that under-represents the cell — which reads downstream as weaker
+    // co-presence, not as an error. An empty sketch is the honest answer.
+    if marks_flat.len() % 16 != 0 || marks_flat.len() / 16 != rssi.len() {
+        return pocp::CellSketch([u64::MAX; KMV_K]).0.to_vec();
+    }
     let marks: Vec<[u8; 16]> = marks_flat
         .chunks_exact(16)
         .map(|c| c.try_into().unwrap())
@@ -452,10 +468,17 @@ pub fn pocp_witness(div_sketch: Vec<u8>, seed: u32, frame_prefix: Vec<u8>) -> Op
 /// Verify a PoCP witness AND check co-presence against the local cell sketch.
 ///
 /// Returns a verdict code:
-///   - 0: Valid — MAC valid + sketches overlap (Jaccard ≥ tau)
-///   - 1: CellMismatch — MAC valid but sketches don't overlap
+///   - 0: Valid — MAC valid, sketches overlap on ≥ MIN_ATTESTING_OVERLAP, Jaccard ≥ tau
+///   - 1: CellMismatch — MAC valid but the cells do not correspond
 ///   - 2: Stale — MAC invalid (bad witness or wrong sketch/seed)
+///   - 4: Unattested — MAC valid, cells touch on exactly ONE element. Display, but mark
+///        unverified: this is both what a single-byte forgery looks like and what an honest
+///        just-started phone legitimately claims, and the two are indistinguishable here.
 ///   - 255: Error — wrong input lengths
+///
+/// 3 is deliberately skipped: the Android shim uses it as its own "no local sketch for any
+/// candidate bucket" sentinel, which is synthesised above this call and never returned by it.
+/// Reusing it would have made every Unattested frame read as that sentinel.
 ///
 /// `local_sketch` is 16 u64 values from `observe_marks`. `claimed_div` is 16 bytes
 /// from the frame's `div_sketch` field. `frame_prefix` is the first 102 bytes of the
@@ -485,10 +508,16 @@ pub fn pocp_verify_witness_local(
         Ok(w) => w,
         Err(_) => return 255,
     };
+    // tau crosses the boundary as a raw f32 from user-editable config. A NaN makes every
+    // `>=` comparison false (harmless — fails closed), but a zero or negative value makes
+    // EVERY sketch pair match, which silently disables the co-presence gate entirely. Clamp
+    // to a floor rather than trusting the caller to have done it.
+    let tau = if tau.is_nan() { 1.0 } else { tau.clamp(0.05, 1.0) };
     match pocp::verify_witness_local(&local, &div, seed, &frame_prefix, &wit_arr, tau) {
         pocp::WitVerdict::Valid => 0,
         pocp::WitVerdict::CellMismatch => 1,
         pocp::WitVerdict::Stale => 2,
+        pocp::WitVerdict::Unattested => 4,
     }
 }
 
@@ -551,6 +580,19 @@ pub fn pair_derive(our_sk: Vec<u8>, their_pk: Vec<u8>) -> Option<Vec<u8>> {
     let our_sk: &[u8; 32] = our_sk.as_slice().try_into().ok()?;
     let their_pk: &[u8; 32] = their_pk.as_slice().try_into().ok()?;
     Some(crypto::pair_derive(our_sk, their_pk)?.to_vec())
+}
+
+/// Short Authentication String for QR pairing, rendered as 4 comparable words (44 bits).
+///
+/// Both phones display this after key agreement and the users compare it BEFORE the contact
+/// is saved. A man-in-the-middle holds two different shared secrets, so the words differ.
+/// Public keys are order-independent (the core sorts them). `None` on wrong lengths.
+#[uniffi::export]
+pub fn pair_sas_words(shared: Vec<u8>, pk_a: Vec<u8>, pk_b: Vec<u8>) -> Option<Vec<String>> {
+    let shared: [u8; 32] = shared.as_slice().try_into().ok()?;
+    let a: [u8; 32] = pk_a.as_slice().try_into().ok()?;
+    let b: [u8; 32] = pk_b.as_slice().try_into().ok()?;
+    Some(crypto::sas_words(&crypto::pair_sas(&shared, &a, &b)))
 }
 
 /// v2 pairing chain seed (A3 forward secrecy). `shared` is the `pair_derive` output;
@@ -745,6 +787,11 @@ impl BeaconFfi {
 /// Returns 32-byte entropy block, or `None` if fewer than `min_hearers` unique marks.
 #[uniffi::export]
 pub fn beacon_entropy(marks_flat: Vec<u8>, min_hearers: u32) -> Option<Vec<u8>> {
+    // A min_hearers of 0 makes local_entropy succeed with an EMPTY mark set, so the beacon
+    // reports healthy entropy while actually being a constant — and the marks that rotate on
+    // it stop rotating, which is the unlinkability property. Floor it here; the config screen
+    // clamps too, but this is the boundary that must not be talked past.
+    let min_hearers = min_hearers.max(1);
     let marks: Vec<[u8; 16]> = marks_flat
         .chunks_exact(16)
         .map(|c| c.try_into().unwrap())

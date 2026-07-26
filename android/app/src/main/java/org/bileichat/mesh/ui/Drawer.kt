@@ -2,6 +2,7 @@ package org.bileichat.mesh.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -253,6 +254,14 @@ private fun SettingsSection(controller: UiController) {
         // silently partitions the mesh).
         Text("EXPERT — values are clamped to safe ranges on apply", style = monoMicro(TrustAmber))
         ParamField("EPOCH LENGTH (MS)", epochMs) { epochMs = it }
+        // C5: there is no handshake and none is planned — the epoch INDEX is derived as
+        // now/epochMs, so two phones on different values diverge linearly and stop being able
+        // to hear each other entirely within about a minute. The freshness banner does fire,
+        // but it names clocks first, so the setting has to warn for itself.
+        Text(
+            "must match on every phone — a different value silently splits the mesh",
+            style = monoMicro(TrustAmber)
+        )
         ParamField("BEACON FLOOR (MS)", beaconFloorMs) { beaconFloorMs = it }
         ParamField("MIN HEARERS (BEACON ENTROPY)", minHearers) { minHearers = it }
         ParamField("TAU THRESHOLD (CELL MATCH)", tau) { tau = it }
@@ -344,7 +353,58 @@ private fun DiagnosticsSection(controller: UiController) {
     var peerSketch by rememberSaveable { mutableStateOf("") }
     var verdict by remember { mutableStateOf<String?>(null) }
 
+    val selfTestRunning by MeshState.selfTestRunning.collectAsStateWithLifecycle()
+
     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Everything this app does only really runs on a phone: cargo test exercises the core
+        // on a desktop, and R8 can break the UniFFI/JNA bridge at runtime with no compile-time
+        // trace at all. This is the only check that covers the device.
+        DiagButton(
+            if (selfTestRunning) "SELF-TEST RUNNING…" else "RUN SELF-TEST (ALL MODULES)",
+            Modifier.fillMaxWidth()
+        ) { if (!selfTestRunning) controller.runSelfTest() }
+        Text(
+            "Starts at the next epoch boundary. Run it on BOTH phones within a few seconds of " +
+                "each other and the two reports carry the same epoch, so the mark and pairing " +
+                "lines can be compared directly.",
+            style = monoMicro(TextDim)
+        )
+
+        val selfTest by MeshState.selfTestLog.collectAsStateWithLifecycle()
+        if (selfTest.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DiagButton("SHARE REPORT", Modifier.weight(1f)) { controller.shareSelfTest() }
+                DiagButton("CLEAR REPORT", Modifier.weight(1f)) {
+                    MeshState.selfTestLog.value = emptyList()
+                }
+            }
+            SelectionContainer {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Panel)
+                        .padding(8.dp)
+                ) {
+                    // Oldest first: this is a report, read top to bottom, unlike the live log.
+                    selfTest.forEach { line ->
+                        Text(
+                            line,
+                            style = monoMicro(
+                                when {
+                                    line.startsWith("[FAIL]") -> PanicRed
+                                    line.startsWith("[PASS]") -> TierLocal
+                                    line.startsWith("RESULT:") || line.startsWith("BILEICHAT") ->
+                                        TextBright
+                                    else -> TextDim
+                                }
+                            ),
+                            lineHeight = 14.sp
+                        )
+                    }
+                }
+            }
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DiagButton("EXPORT LOG", Modifier.weight(1f)) { controller.exportLog() }
             DiagButton("CLEAR LOG", Modifier.weight(1f)) { controller.clearLog() }

@@ -26,14 +26,30 @@
 //! ```
 //!
 //! Large crowds are protected as designed; small clandestine cells are not, and those are
-//! the higher-value target. Until the witness MAC is keyed by a fuzzy extractor over the
-//! full u64 sketch (the deferred M6+ item noted at [`witness`]), **callers must not present
-//! a verified witness as trustworthy when the local sketch holds fewer than 4 marks** — the
-//! Android shim degrades the badge to LOW-CONFIDENCE below that threshold.
+//! the higher-value target.
 //!
-//! A count floor (`intersection >= 2`) would close the grind, but it also rejects the
-//! 1-element sketch a cold-started phone legitimately has, which is exactly how LOCAL
-//! delivery broke before self-inclusion. The two must be redesigned together.
+//! # RESOLVED: the count floor, and the honest failure that blocked it
+//!
+//! The note above used to end by saying a count floor (`intersection >= 2`) would close the
+//! grind but would also reject the 1-element sketch a cold-started phone legitimately has,
+//! so the two had to be redesigned together. They have been.
+//!
+//! The reason they are one problem: the ratio has no absolute floor, so a 1-element claim
+//! scores `1/N` — which CLEARS `tau` for `N <= 3` (the forgery above) and MISSES it for
+//! `N >= 4` (an honest phone whose scanner just started, having its LOCAL alerts dropped by
+//! every established peer, worst exactly in a growing crowd). Same cause, opposite symptoms,
+//! disjoint cell sizes.
+//!
+//! The fix is to stop conflating "attested" with "displayable". A one-element overlap now
+//! returns [`WitVerdict::Unattested`] instead of being scored: callers DISPLAY it and mark it
+//! unverified, rather than either trusting it or discarding it. `Valid` requires
+//! [`MIN_ATTESTING_OVERLAP`]. No single-byte sweep reaches full trust at any cell size, and
+//! the honest cold start is no longer silently dropped.
+//!
+//! Callers must still degrade the badge when their own cell holds fewer than 4 marks — a
+//! verified witness judged against a tiny local cell is weak evidence regardless of overlap.
+//! See [`verify_witness_local`] for what remains open (a two-byte grind against very small
+//! cells) and why the floor cannot simply be raised.
 
 use std::collections::BTreeSet;
 
@@ -50,7 +66,24 @@ pub enum WitVerdict {
     /// Cell does not match local observation => relocation/replay attack. Raise F4 ALARM.
     CellMismatch,
     Stale,
+    /// The witness verifies and the cells touch, but on exactly ONE element — the weakest
+    /// possible overlap, and the one an attacker can reach by grinding a single wire byte.
+    /// Not evidence of co-presence, but not evidence against it either: it is also what an
+    /// honest phone that has only just started scanning legitimately claims. Callers must
+    /// DISPLAY these and mark them unverified; dropping them is what broke cold-start LOCAL
+    /// delivery in a crowd. See [`MIN_ATTESTING_OVERLAP`].
+    Unattested,
 }
+
+/// Overlapping elements required before a verified witness counts as co-presence evidence.
+///
+/// Two, because that is the largest floor a two-device mesh can satisfy: A holds
+/// `{mark_A, mark_B}` and B holds `{mark_B, mark_A}`, so honest overlap is exactly 2 there.
+/// Three would make the smallest real topology permanently unattestable.
+///
+/// This is the count floor the module header asks for, and it resolves both sides of the
+/// same defect at once — see that header for the measured forgery table.
+pub const MIN_ATTESTING_OVERLAP: usize = 2;
 
 fn cell_key(seed: u32) -> [u8; 32] {
     blake3::derive_key("mesh-core:v1:pocp-cell", &seed.to_le_bytes())
@@ -79,13 +112,19 @@ pub fn observe(marks: &[[u8; 16]], rssi: &[i8], seed: u32, rssi_floor_dbm: i8) -
     CellSketch(arr)
 }
 
-/// Jaccard similarity of two cell sketches in [0,1].
-pub fn jaccard(a: &CellSketch, b: &CellSketch) -> f32 {
+/// Jaccard similarity of two cell sketches in [0,1], with the overlap count it came from.
+///
+/// The count is the numerator of the ratio, taken over the same KMV window — never a
+/// separately computed intersection, so the two can never disagree. For cells larger than
+/// [`KMV_K`] it is an ESTIMATE (the window caps it at 16), which is fine for its only
+/// purpose: distinguishing "one element in common" from "genuinely overlapping cells".
+/// An honest large cell lands around `KMV_K * tau` ≈ 4.8 at `tau = 0.3`, comfortably clear.
+pub fn jaccard_with_overlap(a: &CellSketch, b: &CellSketch) -> (f32, usize) {
     let set_a: BTreeSet<u64> = a.0.iter().copied().filter(|v| *v != u64::MAX).collect();
     let set_b: BTreeSet<u64> = b.0.iter().copied().filter(|v| *v != u64::MAX).collect();
     let union: Vec<u64> = set_a.union(&set_b).copied().collect();
     if union.is_empty() {
-        return 0.0;
+        return (0.0, 0);
     }
     let x_len = KMV_K.min(union.len());
     let x = &union[..x_len];
@@ -93,7 +132,12 @@ pub fn jaccard(a: &CellSketch, b: &CellSketch) -> f32 {
         .iter()
         .filter(|v| set_a.contains(v) && set_b.contains(v))
         .count();
-    inter_in_x as f32 / x_len as f32
+    (inter_in_x as f32 / x_len as f32, inter_in_x)
+}
+
+/// Jaccard similarity of two cell sketches in [0,1].
+pub fn jaccard(a: &CellSketch, b: &CellSketch) -> f32 {
+    jaccard_with_overlap(a, b).0
 }
 
 /// Fuzzy cell match at measured threshold `tau`.
@@ -208,8 +252,33 @@ pub fn verify_witness(
 /// Processing order:
 ///   1. Verify the witness MAC — did the sender know this `claimed_div` sketch?
 ///   2. Truncate the local sketch to u8, convert both to `CellSketch`.
-///   3. Compute Jaccard between the two u8-truncated sketches.
-///   4. If Jaccard ≥ `tau` → `Valid`, else → `CellMismatch`.
+///   3. Compute Jaccard AND the overlap count between the two u8-truncated sketches.
+///   4. Decide on both, not on the ratio alone (see below).
+///
+/// The ratio alone was the whole co-presence test, and being a ratio it had no absolute
+/// floor: a claim of one element scores `1/N` against an N-mark local cell. That single
+/// property produced two opposite failures, which is why they are fixed together —
+///
+///   * FORGERY (small cells): `1/N >= tau` for `N <= 3`, and the claimed element is one wire
+///     byte, so 256 frames sweep the whole space and land 2–3 accepted forgeries against the
+///     small clandestine cells that are the highest-value target.
+///   * HONEST LOSS (large cells): `1/N < tau` for `N >= 4`, so a phone whose scanner has only
+///     just started — its sketch holding nothing but its own mark — was judged CellMismatch
+///     by every established peer and had its LOCAL alerts dropped outright. Worst exactly in
+///     a growing crowd, and worst in the first epoch after starting.
+///
+/// Requiring [`MIN_ATTESTING_OVERLAP`] for `Valid` closes the forgery, and routing a
+/// one-element overlap to [`WitVerdict::Unattested`] rather than `CellMismatch` stops
+/// discarding the honest claim. A one-element sweep can no longer reach full trust at ANY
+/// cell size.
+///
+/// RESIDUAL, stated precisely: an attacker who grinds TWO colliding bytes still reaches
+/// `Valid` against cells of about six or fewer (both elements must land in the victim's
+/// cell, and `2/union >= tau` bounds the union). That costs on the order of `(256/N)^2`
+/// signed frames instead of 256, and the floor cannot be raised past 2 without making
+/// two-device meshes unattestable. Closing it properly needs the witness MAC keyed by a
+/// fuzzy extractor over the full u64 sketch (deferred, M6+), which also closes the
+/// unrelated and larger hole of copying a relayed sketch wholesale.
 ///
 /// `claimed_div` comes from the frame's `div_sketch` field (bytes 18..34).
 /// `frame_prefix` is the first 102 bytes of the frame (bytes 0..102).
@@ -228,10 +297,16 @@ pub fn verify_witness_local(
     let local_div = sketch_to_div_sketch(local);
     let local_cell = div_sketch_to_cell(&local_div);
     let sender_cell = div_sketch_to_cell(claimed_div);
-    if matches(&local_cell, &sender_cell, tau) {
-        WitVerdict::Valid
-    } else {
-        WitVerdict::CellMismatch
+    let (sim, overlap) = jaccard_with_overlap(&local_cell, &sender_cell);
+    match overlap {
+        // Nothing in common: the sender was not where it claims. Unchanged behaviour.
+        0 => WitVerdict::CellMismatch,
+        // The weakest possible overlap. Ambiguous by construction — forgeable AND honest.
+        1 => WitVerdict::Unattested,
+        _ if sim >= tau => WitVerdict::Valid,
+        // Real but partial overlap that misses tau: two different cells that happen to share
+        // a few marks. Still a mismatch.
+        _ => WitVerdict::CellMismatch,
     }
 }
 

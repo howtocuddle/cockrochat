@@ -34,7 +34,14 @@ data class Contact(
 }
 
 /** A parsed out-of-band pairing offer. [saltHex] non-null ⇒ v2 (forward-secret ratchet). */
-data class PairingOffer(val pkHex: String, val saltHex: String?)
+/**
+ * A scanned pairing payload.
+ *
+ * [anchorEpoch] is the epoch at which the OTHER phone generated its QR. It exists because the
+ * ratchet chain start must be AGREED, not observed locally — see PairStore.addContact.
+ * Null for legacy v1/v2 payloads, which carry no epoch.
+ */
+data class PairingOffer(val pkHex: String, val saltHex: String?, val anchorEpoch: UInt? = null)
 
 object PairStore {
     private const val PREFS_NAME = "mesh_pairing_v2"
@@ -120,12 +127,106 @@ object PairStore {
      *  other seconds apart still have overlapping key windows. See addContact. */
     private const val PAIR_EPOCH_BACKDATE = 3u
 
+    /** Steps per `pair_ratchet` call. Must stay at or under the core's 8192 cap
+     *  (mesh-core/src/crypto.rs:139). */
+    private const val RATCHET_CHUNK = 8000u
+
+    /** Epochs in [ms], for the config-derived span bounds below. */
+    private fun epochsIn(ms: Long): UInt =
+        (ms / MeshState.config.epochMs).coerceAtLeast(1L).toUInt()
+
+    /** Furthest back a scanned QR may anchor a chain. A hostile payload can name any epoch,
+     *  and the anchor is where catch-up starts counting from. */
+    private fun maxAnchorBackdate(): UInt = epochsIn(24L * 60 * 60 * 1000)
+
+    /** Longest catch-up we will compute. A week offline is ~60k BLAKE3 steps at a 10 s
+     *  epoch — milliseconds. Past this the chain is treated as unrecoverable. */
+    private fun maxRatchetSpan(): UInt = epochsIn(7L * 24 * 60 * 60 * 1000)
+
+    /**
+     * Advance a chain key across an arbitrary span.
+     *
+     * `pair_ratchet` refuses spans over 8192 (crypto.rs:139 — a DoS bound on wire-supplied
+     * epochs), and every chain-advancing path used to call it directly with an unbounded
+     * span. A pair that went 8192 epochs without exchanging a private message — 22.8 h at a
+     * 10 s epoch, i.e. pairing one evening and first using it the next day — blew the cap in
+     * both directions at once. Neither [keyForSend] nor [candidateKeys] can advance a chain
+     * without first succeeding, and [fastForwardChains] gave up on the same call, so nothing
+     * ever recovered: private messaging was permanently dead until the pair met in person
+     * again, with no UI signal at all.
+     *
+     * Walking the span in chunks is exact, not an approximation. The ratchet is a left fold
+     * over the epoch index sequence, so splitting it anywhere reproduces the same sequence —
+     * pinned by `ratchet_composes_at_any_split` in mesh-core/tests/crypto_props.rs.
+     *
+     * Refuses past [maxRatchetSpan] rather than grinding: chunking alone would turn a
+     * hostile QR naming anchor epoch 0 into ~170 M BLAKE3 steps on the pairing path.
+     */
+    private fun ratchetTo(key: ByteArray, from: UInt, to: UInt): ByteArray? {
+        if (to < from) return null
+        if (to - from > maxRatchetSpan()) return null
+        var k = key
+        var e = from
+        while (e < to) {
+            val next = minOf(to, e + RATCHET_CHUNK)
+            k = uniffi.mesh_core.pairRatchet(k, e, next) ?: return null
+            e = next
+        }
+        return k
+    }
+
     private fun myPairSalt(ctx: Context): ByteArray {
         mySalt?.let { return it }
         val s = ByteArray(PAIR_SALT_LEN)
         SecureRandom().nextBytes(s)
         mySalt = s
         return s
+    }
+
+    /**
+     * The anchor epoch THIS phone put in its own QR for the current pairing session.
+     *
+     * v3's shared-anchor scheme needs min(own QR anchor, scanned QR anchor) — the same two
+     * values on both phones. The scanned code carries theirs; this field is the only place
+     * ours exists. Anchoring on min(scanned, now) instead — as the first v3 implementation
+     * did — always collapses to the SCANNED anchor (now is never smaller), so each phone
+     * anchored at the OTHER's epoch: the chains agreed only when both QRs happened to be
+     * generated inside the same 10 s epoch. Because pair_ratchet folds the epoch index into
+     * every step, a one-epoch anchor difference means different keys at EVERY epoch,
+     * permanently — frames relay and echo normally, nothing ever opens, and the only trace
+     * is "private frame not for us (or key mismatch)" in the receiver's debug log.
+     *
+     * Session-scoped like the salt: the QR must stay stable for the whole sitting, and a
+     * fresh anchor per session keeps sequential pairings consistent (min of the two session
+     * anchors is symmetric). Null outside a session.
+     */
+    @Volatile private var mySessionAnchor: UInt? = null
+
+    /**
+     * S5: begin a pairing session. Call when the pairing screen opens.
+     *
+     * The salt is the entropy that makes a v2 chain seed unrecomputable from a seized
+     * long-term secret — that is the entire forward-secrecy claim. It was generated lazily
+     * and then never rotated or cleared, so it lived for the whole PROCESS: a phone left
+     * running all day held, in memory, the material to reconstruct the chain seed of every
+     * contact paired that day, and the pairing screen displayed it as selectable text.
+     * "Forward secret after process death" is a much weaker claim than the one being made.
+     *
+     * A session covers one face-to-face pairing sitting, which is the only window where the
+     * salt genuinely has to stay stable (both people scan the same displayed QR).
+     */
+    @Synchronized
+    fun beginPairingSession() {
+        endPairingSession()
+        mySessionAnchor = currentEpoch()
+    }
+
+    /** S5: end a pairing session and zero the salt. Call when the pairing screen closes. */
+    @Synchronized
+    fun endPairingSession() {
+        mySalt?.fill(0)
+        mySalt = null
+        mySessionAnchor = null
     }
 
     private fun currentEpoch(): UInt =
@@ -135,8 +236,15 @@ object PairStore {
      * v2 QR payload: public key + per-pairing salt. Both public; the secret and the chain
      * keys never leave the device. The salt is fresh per pairing and rotated after each add.
      */
+    /**
+     * v3 adds the generating epoch. Both phones scan each other, so both end up holding both
+     * epochs and can pick the SAME chain anchor with min(); without it each side anchored on
+     * its own wall clock and the two ratchets never produced a common key (see addContact).
+     * The anchor is the SESSION anchor, not the current clock: the QR must stay stable for
+     * the whole sitting, and [buildContact] needs to know what we advertised.
+     */
     fun qrPayload(ctx: Context): String =
-        "bileichat:key:v2:${myPublicHex(ctx)}:${myPairSalt(ctx).toHex()}"
+        "bileichat:key:v3:${myPublicHex(ctx)}:${myPairSalt(ctx).toHex()}:${mySessionAnchor ?: currentEpoch()}"
 
     fun mySaltHex(ctx: Context): String = myPairSalt(ctx).toHex()
 
@@ -145,6 +253,17 @@ object PairStore {
         val trimmed = value.trim()
         val parts = trimmed.split(":")
         return when {
+            parts.size == 6 && parts[0].equals("bileichat", true) &&
+                parts[1].equals("key", true) && parts[2] == "v3" -> {
+                val pk = parts[3]
+                val salt = parts[4]
+                val epoch = parts[5].toUIntOrNull()
+                if (pk.length == 64 && pk.hexToBytesOrNull()?.size == 32 &&
+                    salt.length == PAIR_SALT_LEN * 2 &&
+                    salt.hexToBytesOrNull()?.size == PAIR_SALT_LEN &&
+                    epoch != null
+                ) PairingOffer(pk, salt, epoch) else null
+            }
             parts.size == 5 && parts[0].equals("bileichat", true) &&
                 parts[1].equals("key", true) && parts[2] == "v2" -> {
                 val pk = parts[3]
@@ -237,31 +356,127 @@ object PairStore {
             }
     }
 
-    @Synchronized
-    fun addContact(ctx: Context, label: String, offerRaw: String): String? {
-        val trimmedLabel = label.trim()
-        if (trimmedLabel.isEmpty()) return "Contact name cannot be empty"
-        if (trimmedLabel.any { it == '\t' || it == '\n' || it == '\r' }) return "Contact name contains invalid characters"
-        if (trimmedLabel.length > 32) return "Contact name too long (max 32 chars)"
-        val offer = parsePairingOffer(offerRaw) ?: return "Invalid pairing key format"
-        val peerPub = offer.pkHex.hexToBytesOrNull() ?: return "Invalid public key"
-        if (peerPub.size != 32) return "Invalid public key size"
-        // D5: pairing with ourselves is never valid.
-        if (offer.pkHex.equals(myPublicHex(ctx), ignoreCase = true)) return "Pairing with your own key is not allowed"
+    /**
+     * A pairing that has completed key agreement but has NOT been stored.
+     *
+     * Exists so the user can be shown something to check before anything is committed. Holds
+     * key material, so it must not outlive the dialog — [PairStore.discardPending] drops it.
+     */
+    class PendingPairing internal constructor(
+        internal val contact: Contact,
+        /** SAS words both phones must display identically (S1b). */
+        val sasWords: List<String>,
+        /** True when this offer downgrades to the static v1 key with no forward secrecy. */
+        val legacy: Boolean,
+        /** True when a contact under this label already exists with a DIFFERENT key. */
+        val replacesExistingKey: Boolean
+    )
 
-        val shared = uniffi.mesh_core.pairDerive(secret(ctx), peerPub) ?: return "Key agreement failed"
+    /** Outcome of [preparePairing]. */
+    sealed interface PairPrepare {
+        data class Error(val message: String) : PairPrepare
+        data class Confirm(val pending: PendingPairing) : PairPrepare
+    }
+
+    /**
+     * Derive a pairing and return it for confirmation. Stores NOTHING.
+     *
+     * Split from the commit because scanning a QR code authenticates nothing on its own: it
+     * proves only that a code was scanned. A relay that shows each side its own code ends up
+     * holding both halves and reading everything, and the old flow saved the contact
+     * immediately with no opportunity to notice. It also silently REPLACED an existing
+     * contact's key under the same label, so one re-scan of an attacker's code was enough.
+     */
+    @Synchronized
+    fun preparePairing(ctx: Context, label: String, offerRaw: String): PairPrepare {
+        val prepared = buildContact(ctx, label, offerRaw)
+        if (prepared is PairPrepare.Error) return prepared
+        return prepared
+    }
+
+    /** Store a pairing the user has confirmed. Returns an error string, or null on success. */
+    @Synchronized
+    fun commitPairing(ctx: Context, pending: PendingPairing): String? {
+        val contact = pending.contact
+        if (prefs(ctx) == null) {
+            memContacts.removeAll { it.label == contact.label }
+            memContacts.add(contact)
+        } else {
+            val updated = contacts(ctx).filter { it.label != contact.label } + contact
+            persist(ctx, updated)
+        }
+        contactCache = null
+        return null
+    }
+
+    @Synchronized
+    private fun buildContact(ctx: Context, label: String, offerRaw: String): PairPrepare {
+        val trimmedLabel = label.trim()
+        if (trimmedLabel.isEmpty()) return PairPrepare.Error("Contact name cannot be empty")
+        if (trimmedLabel.any { it == '\t' || it == '\n' || it == '\r' }) return PairPrepare.Error("Contact name contains invalid characters")
+        if (trimmedLabel.length > 32) return PairPrepare.Error("Contact name too long (max 32 chars)")
+        val offer = parsePairingOffer(offerRaw) ?: return PairPrepare.Error("Invalid pairing key format")
+        val peerPub = offer.pkHex.hexToBytesOrNull() ?: return PairPrepare.Error("Invalid public key")
+        if (peerPub.size != 32) return PairPrepare.Error("Invalid public key size")
+        // D5: pairing with ourselves is never valid.
+        if (offer.pkHex.equals(myPublicHex(ctx), ignoreCase = true)) return PairPrepare.Error("Pairing with your own key is not allowed")
+
+        val shared = uniffi.mesh_core.pairDerive(secret(ctx), peerPub) ?: return PairPrepare.Error("Key agreement failed")
         val contact = if (offer.saltHex != null) {
             // v2: chain seed = f(ECDH, both salts). Salts are NOT stored — after this call
             // only the ratchet chain state survives, which is what gives seizure resistance.
-            val theirSalt = offer.saltHex.hexToBytesOrNull() ?: return "Invalid salt"
-            val seed0 = uniffi.mesh_core.pairSeedV2(shared, myPairSalt(ctx), theirSalt) ?: return "Derivation failed"
-            // Backdate the chain start. The two sides scan each other seconds apart, so each
-            // stamped its OWN local epoch: if Alice landed on epoch 100 and Bob on 102, a
-            // message Alice sent at 101 fell into candidateKeys' `else -> emptyList()` branch
-            // on Bob (101 != 102, no prevKey, 101 < 102) and was undecryptable forever, with
-            // no log line. Starting the chain a few epochs back makes the two windows overlap;
-            // ratcheting forward from there is one BLAKE3 step per epoch.
-            val start = currentEpoch()
+            val theirSalt = offer.saltHex.hexToBytesOrNull() ?: return PairPrepare.Error("Invalid salt")
+            val seed0 = uniffi.mesh_core.pairSeedV2(shared, myPairSalt(ctx), theirSalt) ?: return PairPrepare.Error("Derivation failed")
+            // The chain anchor must be AGREED, not observed locally.
+            //
+            // pair_ratchet mixes the epoch INDEX into every step
+            // (k_e = derive_key(k_{e-1} || e)), so the key at epoch E is a function of the
+            // whole index sequence from the anchor onward — i.e. of where the chain started.
+            // Both sides begin from the same seed0 (pair_seed_v2 is order-independent), but
+            // each used its OWN wall clock at scan time as the anchor. QR pairing is
+            // inherently sequential, so those clocks land in different 10 s epochs almost
+            // every time: Alice anchored at 100, Bob at 102, and from then on their chains
+            // produced different keys at EVERY epoch. Not a skew window — a permanent
+            // mismatch. Every v2 private message failed to open, forever, silently.
+            //
+            // Backdating both by a constant did not help: it shifted both anchors equally and
+            // left the difference intact. That was a misdiagnosis of this same bug.
+            //
+            // v3 puts the generating epoch in the QR, so each side holds both epochs and takes
+            // min() — same value on both phones, no clock agreement needed. The backdate is
+            // kept only to widen the retained prevKey window.
+            //
+            // The min is over the TWO QR ANCHORS: ours ([mySessionAnchor]) and theirs. The
+            // first v3 implementation wrote min(theirs, now) instead, and `now` is never
+            // smaller than an anchor already generated — so it collapsed to *their* anchor,
+            // and each phone dutifully anchored at the other one's epoch. The chains agreed
+            // only when both QRs happened to be generated inside the same 10 s epoch; one
+            // person opening the pairing screen a few seconds later than the other was enough
+            // to break every private message between them, in both directions, forever, with
+            // no error anywhere. The symptom is specific and worth recognising: frames relay
+            // normally and the sender even gets two ticks (relaying a sealed frame needs no
+            // key), while the recipient's screen stays empty.
+            // The anchor comes off a scanned payload, so it is attacker-chosen. It is also
+            // where chain catch-up starts counting from — and catch-up now walks arbitrarily
+            // long spans in chunks rather than refusing them. Unclamped, a code naming epoch 0
+            // would turn every later fast-forward into ~170 M BLAKE3 steps. Reject stale
+            // anchors here so the chunking fix cannot be used as a CPU bomb.
+            val nowEpoch = currentEpoch()
+            offer.anchorEpoch?.let { anchor ->
+                val backdate = maxAnchorBackdate()
+                val oldest = if (nowEpoch >= backdate) nowEpoch - backdate else 0u
+                if (anchor < oldest) {
+                    return PairPrepare.Error("Pairing code is more than a day old — ask them to show a fresh one")
+                }
+            }
+            val start = offer.anchorEpoch?.let { minOf(it, mySessionAnchor ?: nowEpoch) } ?: run {
+                MeshState.logDebug(
+                    "pairing with a pre-v3 code: no shared chain anchor, so private messages " +
+                        "will only open if both phones scanned within the same epoch — " +
+                        "re-pair once both are updated"
+                )
+                nowEpoch
+            }
             Contact(
                 trimmedLabel,
                 seed0,
@@ -273,20 +488,31 @@ object PairStore {
             Contact(trimmedLabel, shared, v2 = false)
         }
 
-        if (prefs(ctx) == null) {
-            memContacts.removeAll { it.label == trimmedLabel }
-            memContacts.add(contact)
-        } else {
-            val updated = contacts(ctx).filter { it.label != trimmedLabel } + contact
-            persist(ctx, updated)
-        }
-        contactCache = null
-        // NOTE: mySalt deliberately does NOT rotate here. The salt in the displayed QR
-        // must equal the salt used for every pairing made while that QR is shown — rotating
-        // on add would break sequential face-to-face pairing (the second scanner would get
-        // a different salt than the one they scanned). The salt is per-process only and
-        // never persisted, which is what preserves forward secrecy after process death.
-        return null
+        // S1b: the string both users compare. Bound to the ECDH output AND both identities,
+        // so a relay holding a separate secret with each side cannot make the two agree.
+        val sas = uniffi.mesh_core.pairSasWords(shared, myPublicHex(ctx).hexToBytesOrNull()!!, peerPub)
+            ?: return PairPrepare.Error("Could not compute the verification words")
+
+        // S1a: key continuity. Replacing an existing label's key used to happen silently, so
+        // one scan of a substituted code redirected every future message to someone else with
+        // no trace. Surfaced, never auto-refused — after per-session salts a legitimate
+        // re-pair also changes the key, so this fires for honest users too and the UI wording
+        // must not accuse anyone.
+        val existing = contacts(ctx).firstOrNull { it.label == trimmedLabel }
+        val replaces = existing != null && !existing.pairKey.contentEquals(contact.pairKey)
+
+        // NOTE: mySalt deliberately does NOT rotate here. The salt in the displayed QR must
+        // equal the salt used for every pairing made while that QR is shown — rotating on add
+        // would break sequential face-to-face pairing. It is dropped when the pairing SESSION
+        // ends (see endPairingSession), which is what bounds its lifetime.
+        return PairPrepare.Confirm(
+            PendingPairing(
+                contact = contact,
+                sasWords = sas,
+                legacy = !contact.v2,
+                replacesExistingKey = replaces
+            )
+        )
     }
 
     @Synchronized
@@ -320,7 +546,7 @@ object PairStore {
         val contact = contacts(ctx).firstOrNull { it.label == label } ?: return null
         if (!contact.v2) return contact.pairKey
         if (epoch <= contact.chainEpoch) return contact.pairKey
-        val advanced = uniffi.mesh_core.pairRatchet(contact.pairKey, contact.chainEpoch, epoch)
+        val advanced = ratchetTo(contact.pairKey, contact.chainEpoch, epoch)
             ?: return null
         val updated = contact.copy(
             pairKey = advanced,
@@ -342,7 +568,9 @@ object PairStore {
             contact.prevKey != null && frameEpoch == contact.prevEpoch -> listOf(contact.prevKey)
             frameEpoch > contact.chainEpoch -> {
                 // Sender is ahead of our stored chain — fast-forward (one-way, cheap).
-                uniffi.mesh_core.pairRatchet(contact.pairKey, contact.chainEpoch, frameEpoch)
+                // Normally one or two steps: [fastForwardChains] keeps chainEpoch pinned to
+                // epoch-1 every epoch, so this stays short even after a long offline gap.
+                ratchetTo(contact.pairKey, contact.chainEpoch, frameEpoch)
                     ?.let { listOf(it) } ?: emptyList()
             }
             else -> {
@@ -385,11 +613,14 @@ object PairStore {
         val target = epoch - 1u
         for (c in contacts(ctx)) {
             if (!c.v2 || target <= c.chainEpoch) continue
-            val advanced = uniffi.mesh_core.pairRatchet(c.pairKey, c.chainEpoch, target)
+            val advanced = ratchetTo(c.pairKey, c.chainEpoch, target)
             if (advanced == null) {
+                // Contact label deliberately omitted: the debug log is exportable, and a line
+                // naming who you are paired with is social-graph metadata a seized or shared
+                // export would hand over for free (same reason as [candidateKeys]).
                 MeshState.logDebug(
-                    "chain fast-forward for '" + c.label + "' failed: span " +
-                        (target - c.chainEpoch) + " epochs exceeds the ratchet cap"
+                    "chain fast-forward failed: span " + (target - c.chainEpoch) +
+                        " epochs exceeds the recoverable window — that pairing must be redone"
                 )
                 continue
             }
@@ -408,7 +639,7 @@ object PairStore {
     fun noteOpened(ctx: Context, label: String, frameEpoch: UInt) {
         val contact = contacts(ctx).firstOrNull { it.label == label } ?: return
         if (!contact.v2 || frameEpoch <= contact.chainEpoch) return
-        val advanced = uniffi.mesh_core.pairRatchet(contact.pairKey, contact.chainEpoch, frameEpoch)
+        val advanced = ratchetTo(contact.pairKey, contact.chainEpoch, frameEpoch)
             ?: return
         storeUpdated(ctx, contact.copy(
             pairKey = advanced,

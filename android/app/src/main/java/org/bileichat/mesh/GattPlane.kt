@@ -66,6 +66,18 @@ class GattPlane(
         private const val MAX_SUBSCRIBERS = 4
         /** Centrals with no GATT activity for this long are disconnected (ms). */
         private const val CENTRAL_IDLE_TIMEOUT_MS = 60_000L
+
+        /**
+         * S7: hard tenure cap for a SUBSCRIBED central (ms).
+         *
+         * Subscribers are exempt from the idle timeout because notifications are
+         * server-initiated and produce no inbound ATT traffic, so a healthy quiet listener
+         * looks identical to a squatter. That exemption had no upper bound, which meant four
+         * cheap dongles could subscribe once and hold every server slot until process death,
+         * locking out the legacy phones this plane exists to serve. Ten minutes is far longer
+         * than the churn the exemption was added to avoid, and still bounded.
+         */
+        private const val CENTRAL_MAX_TENURE_MS = 10 * 60_000L
         /** A legacy peer must beacon persistently for this long before we spend a client
          *  slot on it (three cheap dongles flashing the UUID must not exhaust slots). */
         private const val MIN_PEER_AGE_MS = 8_000L
@@ -90,6 +102,9 @@ class GattPlane(
     private var gattServer: BluetoothGattServer? = null
     /** Devices that have enabled notifications on FRAME_TX (address -> device). */
     private val notifySubscribers = ConcurrentHashMap<String, BluetoothDevice>()
+
+    /** S7: when each central subscribed, for the tenure cap. */
+    private val subscribedSince = ConcurrentHashMap<String, Long>()
     /**
      * Per-device accumulation buffer for prepared (long) writes on FRAME_RX.
      * Key = device address.
@@ -159,7 +174,23 @@ class GattPlane(
                     // RECONNECT_BACKOFF plus a fresh MIN_PEER_AGE_MS dwell: roughly 13 s
                     // deaf every minute, on exactly the phones this fallback plane exists
                     // to carry.
-                    if (notifySubscribers.containsKey(addr)) continue
+                    // S7: the exemption is now time-bounded. Past CENTRAL_MAX_TENURE_MS the
+                    // slot is recycled regardless, so a squatter cannot hold one indefinitely.
+                    // A genuine listener simply reconnects and re-subscribes.
+                    if (notifySubscribers.containsKey(addr)) {
+                        val since = subscribedSince[addr] ?: now
+                        if (now - since <= CENTRAL_MAX_TENURE_MS) continue
+                        try {
+                            gattServer?.cancelConnection(pair.first)
+                            onDebug("gatt server: rotated long-tenured subscriber $addr")
+                        } catch (e: Exception) {
+                            onDebug("gatt server: tenure rotate $addr failed: ${e.message}")
+                        }
+                        notifySubscribers.remove(addr)
+                        subscribedSince.remove(addr)
+                        centralActivity.remove(addr)
+                        continue
+                    }
                     if (now - pair.second > CENTRAL_IDLE_TIMEOUT_MS) {
                         try {
                             gattServer?.cancelConnection(pair.first)
@@ -172,6 +203,18 @@ class GattPlane(
                 }
             }
         }, 30_000L, 30_000L)
+    }
+
+    /** One-line state summary for the self-test report. No addresses — a shared log must not
+     *  carry the MAC addresses of everyone the phone has been near. */
+    fun diagnostics(): String {
+        val connected = peers.values.count { it.connected }
+        val connecting = peers.values.count { it.connecting }
+        val smallMtu = peers.values.count { it.connected && it.mtu < MTU_MIN_FOR_NOTIFY }
+        return "server=${if (gattServer != null) "open" else "closed"} " +
+            "subscribers=${notifySubscribers.size}/$MAX_SUBSCRIBERS " +
+            "clients=$connected connecting=$connecting tracked=${peers.size}/$MAX_TRACKED_PEERS " +
+            "smallMtu=$smallMtu chunkBufs=${chunkBuffers.size}"
     }
 
     /** Close GATT server and all client connections. Call from MeshService.onDestroy. */
@@ -205,6 +248,7 @@ class GattPlane(
             gattServer?.close()
             gattServer = null
             notifySubscribers.clear()
+            subscribedSince.clear()
             centralActivity.clear()
             centralMtu.clear()
             chunkBuffers.clear()
@@ -309,6 +353,7 @@ class GattPlane(
             val addr = device.address
             if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 notifySubscribers.remove(addr)
+                subscribedSince.remove(addr)
                 preparedWriteBuffers.remove(addr)
                 centralActivity.remove(addr)
                 centralMtu.remove(addr)
@@ -472,9 +517,11 @@ class GattPlane(
                     return
                 }
                 notifySubscribers[addr] = device
+                subscribedSince.putIfAbsent(addr, System.currentTimeMillis())
                 onDebug("gatt server: $addr subscribed to FRAME_TX")
             } else {
                 notifySubscribers.remove(addr)
+                subscribedSince.remove(addr)
                 onDebug("gatt server: $addr unsubscribed from FRAME_TX")
             }
         }
@@ -542,6 +589,17 @@ class GattPlane(
         val writeLock = Any()
         val pendingWrites = java.util.ArrayDeque<ByteArray>()
         @Volatile var writeInFlight = false
+
+        /**
+         * C4: a poll-read that had to yield to an in-flight chunked write, to be issued the
+         * moment the write queue drains.
+         *
+         * Below MTU_MIN_FOR_NOTIFY the poll-read IS this peer's only receive path, and a relay
+         * burst is 13 serialised chunk writes per frame — so simply skipping the read left the
+         * link deaf for the whole burst and only retried 5 s later. The busier the mesh, the
+         * deafer the legacy phone, which is exactly backwards.
+         */
+        @Volatile var readDeferred = false
 
         // Running RSSI poll: cancelled by clearing gatt reference
         @Volatile var rssiPollHandle: java.util.Timer? = null
@@ -798,6 +856,8 @@ class GattPlane(
                         state.pendingWrites.clear()
                         state.writeInFlight = false
                     }
+                    // The queue was abandoned, so the deferred read is owed one either way.
+                    flushDeferredRead(gatt, state)
                     // Start the poll anyway. Sending and receiving are independent: for a
                     // small-MTU peer (<229) notifications cannot carry a whole frame, so the
                     // RSSI poll's read-back IS the only receive path. Gating it on the first
@@ -822,6 +882,10 @@ class GattPlane(
                         false
                     }
                 }
+                // C4: the queue just drained — give the deferred poll-read its slot now,
+                // outside writeLock, rather than making a small-MTU peer wait for the next
+                // 5 s tick. This is that peer's only way to hear us.
+                if (!more) flushDeferredRead(gatt, state)
                 if (!more && !state.initialWriteDone) {
                     state.initialWriteDone = true
                     onDebug("gatt client: $addr initial FRAME_RX write ok; starting RSSI poll")
@@ -953,6 +1017,24 @@ class GattPlane(
         }
     }
 
+    /**
+     * C4: issue a poll-read that yielded to a chunked write, now that the queue has drained.
+     * Must be called OUTSIDE state.writeLock — it starts a GATT operation.
+     */
+    private fun flushDeferredRead(gatt: BluetoothGatt, state: PeerState) {
+        if (!state.readDeferred) return
+        state.readDeferred = false
+        if (!state.connected || state.mtu >= MTU_MIN_FOR_NOTIFY) return
+        try {
+            val char = gatt.getService(SERVICE_UUID)?.getCharacteristic(CHAR_FRAME_TX)
+            if (char != null) gatt.readCharacteristic(char)
+        } catch (e: SecurityException) {
+            onDebug("deferred read[${state.address}] SecurityException: ${e.message}")
+        } catch (e: Exception) {
+            onDebug("deferred read[${state.address}] failed: ${e.message}")
+        }
+    }
+
     /** Start a periodic RSSI read on a 5 s cadence for [state]'s connection. */
     private fun startRssiPoll(gatt: BluetoothGatt, state: PeerState) {
         val timer = java.util.Timer("rssi-${state.address}", true)
@@ -968,15 +1050,23 @@ class GattPlane(
                     // C5: below MTU_MIN_FOR_NOTIFY the peer's 226-byte notifications never
                     // arrive — poll-read FRAME_TX instead (server supports offset reads,
                     // so the stack's blob-read assembles the full frame).
-                    // Skip the read while a chunked write is in flight: Android serializes
-                    // one GATT operation per connection, so an overlapping read makes the
-                    // next writeCharacteristic return false and writeNextChunkLocked drops
-                    // the whole queue — losing that frame to this peer entirely. The next
-                    // tick 5 s later picks the read back up.
-                    val busy = synchronized(state.writeLock) { state.writeInFlight }
-                    if (state.mtu < MTU_MIN_FOR_NOTIFY && !busy) {
-                        val char = gatt.getService(SERVICE_UUID)?.getCharacteristic(CHAR_FRAME_TX)
-                        if (char != null) gatt.readCharacteristic(char)
+                    // Do not overlap the read with a chunked write: Android serializes one
+                    // GATT operation per connection, so an overlapping read makes the next
+                    // writeCharacteristic return false and writeNextChunkLocked drops the
+                    // whole queue — losing that frame to this peer entirely.
+                    //
+                    // C4: defer rather than drop it. The read is re-issued as soon as the
+                    // write queue drains, so a relay burst delays this peer's only receive
+                    // path by the length of the burst instead of silencing it for a full
+                    // 5 s poll interval per burst.
+                    if (state.mtu < MTU_MIN_FOR_NOTIFY) {
+                        val busy = synchronized(state.writeLock) { state.writeInFlight }
+                        if (busy) {
+                            state.readDeferred = true
+                        } else {
+                            val char = gatt.getService(SERVICE_UUID)?.getCharacteristic(CHAR_FRAME_TX)
+                            if (char != null) gatt.readCharacteristic(char)
+                        }
                     }
                 } catch (e: SecurityException) {
                     onDebug("readRemoteRssi[${state.address}] SecurityException: ${e.message}")

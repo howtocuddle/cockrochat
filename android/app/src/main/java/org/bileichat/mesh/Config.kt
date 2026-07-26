@@ -29,15 +29,25 @@ data class MeshConfig(
     }
 
     /** C1: clamp every field into its safe range. */
-    fun sanitized(): MeshConfig = copy(
-        epochMs = epochMs.coerceIn(EPOCH_RANGE),
-        beaconFloorMs = beaconFloorMs.coerceIn(BEACON_FLOOR_RANGE),
-        minHearers = minHearers.coerceIn(MIN_HEARERS_RANGE),
-        tauThreshold = tauThreshold.coerceIn(TAU_RANGE),
-        rssiFloorDbm = rssiFloorDbm.coerceIn(RSSI_FLOOR_RANGE),
-        advIntervalMs = advIntervalMs.coerceIn(ADV_INTERVAL_RANGE),
-        messageRepeatEpochs = messageRepeatEpochs.coerceIn(REPEAT_EPOCHS_RANGE)
-    )
+    fun sanitized(): MeshConfig {
+        val epoch = epochMs.coerceIn(EPOCH_RANGE)
+        return copy(
+            epochMs = epoch,
+            // C11: the beacon floor must stay strictly under the epoch. At or above it, the
+            // beacon advances at most once per two epochs, so the per-epoch mark stops
+            // rotating every other epoch — and the mark rotation IS the unlinkability
+            // property. Two combinations that are each individually in range therefore
+            // silently halve it, which is why this is clamped relatively, not just to a range.
+            beaconFloorMs = beaconFloorMs
+                .coerceIn(BEACON_FLOOR_RANGE)
+                .coerceAtMost((epoch - 1000L).coerceAtLeast(BEACON_FLOOR_RANGE.first)),
+            minHearers = minHearers.coerceIn(MIN_HEARERS_RANGE),
+            tauThreshold = tauThreshold.coerceIn(TAU_RANGE),
+            rssiFloorDbm = rssiFloorDbm.coerceIn(RSSI_FLOOR_RANGE),
+            advIntervalMs = advIntervalMs.coerceIn(ADV_INTERVAL_RANGE),
+            messageRepeatEpochs = messageRepeatEpochs.coerceIn(REPEAT_EPOCHS_RANGE)
+        )
+    }
 }
 
 object ConfigStore {

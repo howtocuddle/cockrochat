@@ -112,6 +112,22 @@ class Measurement {
 
     fun totalHeard(): Int = synchronized(rowsLock) { rows.size }
 
+    // ---- Self-test diagnostics -------------------------------------------------------
+    // Marks rotate every epoch, so these are only comparable between two phones for the SAME
+    // epoch number — which is exactly what the self-test's epoch-boundary wait arranges. If
+    // phone A's self mark appears in phone B's heard list, the RF path is proven end to end.
+
+    /** Distinct marks heard in [epoch], sorted, 8-hex-prefixed. */
+    fun heardMarksThisEpoch(epoch: UInt): List<String> =
+        epochMarks[epoch]?.toList()?.map { it.take(8) }?.sorted() ?: emptyList()
+
+    /** Marks heard in [epoch] at their ORIGINATION ttl — no relay hop between us. */
+    fun directMarksThisEpoch(epoch: UInt): List<String> =
+        directMarks[epoch]?.toList()?.map { it.take(8) }?.sorted() ?: emptyList()
+
+    /** This device's own mark for [epoch], 8-hex-prefixed. */
+    fun selfMark(epoch: UInt): String? = selfMarks[epoch]?.take(8)
+
     fun localSketch(epoch: UInt, seed: ByteArray, floorDbm: Int): List<ULong> {
         // Collect rows for this epoch
         val epochRows = synchronized(rowsLock) { rows.filter { it.epoch == epoch } }
@@ -141,6 +157,18 @@ class Measurement {
 
         return observeMarks(marksFlat, rssiList, sketchSeed, floorDbm.toByte())
     }
+
+    /**
+     * How many marks are actually in our cell for [epoch] — NOT how many KMV slots exist.
+     *
+     * [localSketch] returns a fixed-width list: `observe_marks` always hands back KMV_K = 16
+     * entries with `ULong.MAX_VALUE` in every unfilled slot (including its fail-closed path).
+     * So `localSketch(...).size` is the constant 16, and any `size < N` cell-strength test
+     * written against it is dead code that reads as if it works. Anything judging how much
+     * evidence a co-presence check actually had must call this instead.
+     */
+    fun sketchFill(epoch: UInt, seed: ByteArray, floorDbm: Int): Int =
+        localSketch(epoch, seed, floorDbm).count { it != ULong.MAX_VALUE }
 
     fun exportJson(cfg: MeshConfig): String {
         val root = JSONObject()

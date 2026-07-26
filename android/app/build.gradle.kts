@@ -12,8 +12,8 @@ android {
         applicationId = "org.bileichat.mesh"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.6-unified"
+        versionCode = 11
+        versionName = "0.20-echobackoff"
         // Debug/measurement build: everything tunable in-app; nothing baked as a release secret.
     }
 
@@ -21,6 +21,27 @@ android {
         debug {
             isMinifyEnabled = false
             isDebuggable = true
+        }
+        /*
+         * S4: there was no release buildType at all, so every APK handed out in the field was
+         * a debug build with isDebuggable = true. That leaves JDWP open to `adb`, and anyone
+         * with a minute of USB access can attach and read the long-term X25519 secret, the
+         * per-pairing salts, every pair chain key, and message plaintext straight out of the
+         * running process — defeating the encrypted-at-rest storage entirely, since all of it
+         * is decrypted in memory while the service runs.
+         *
+         * Debug-signed on purpose: these are sideloaded field builds, and a release keystore
+         * is one more secret to protect and lose. Not Play-publishable, which is fine.
+         */
+        release {
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

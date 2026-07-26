@@ -6,6 +6,7 @@
 //! See README.md §2.
 
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit, Nonce, aead::Aead};
+use zeroize::Zeroize;
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 
 pub const DOMAIN_SIG: &[u8] = b"mesh-core:v1:frame-sig";
@@ -121,7 +122,83 @@ pub fn pair_seed_v2(shared: &[u8; 32], salt_a: &[u8; 32], salt_b: &[u8; 32]) -> 
     material[..32].copy_from_slice(shared);
     material[32..64].copy_from_slice(lo);
     material[64..].copy_from_slice(hi);
-    blake3::derive_key("mesh-core:v1:pairseed-v2", &material)
+    let out = blake3::derive_key("mesh-core:v1:pairseed-v2", &material);
+    // M5: this buffer holds the raw ECDH output. Zeroize rather than a plain assignment —
+    // the compiler is free to elide writes to a dead stack buffer.
+    material.zeroize();
+    out
+}
+
+// ---------------------------------------------------------------------------
+// Short Authentication String (SAS) for QR pairing
+// ---------------------------------------------------------------------------
+
+/// Syllable table: 16 onsets x 8 vowels x 16 codas = exactly 2048 = 2^11 words.
+///
+/// Generated rather than drawn from a real-word list on purpose. A 2048-entry English list
+/// would be an unreviewable blob shipped into a security-critical confirmation screen, and
+/// the only dictionary available here (Webster's 2nd) is dominated by words like "besnow" and
+/// "abeigh" — worse to compare than syllables, with no frequency data to filter by. This
+/// table is auditable at a glance, is exactly a power of two so no index is wasted or biased,
+/// and is pronounceable, so the string also works read aloud.
+///
+/// Letters that render or sound alike are left out (c/k, q, x, y, i/j overlap in codas).
+const SAS_ONSETS: [&str; 16] = [
+    "b", "d", "f", "g", "h", "j", "k", "l", "m", "n", "p", "r", "s", "t", "v", "z",
+];
+const SAS_VOWELS: [&str; 8] = ["a", "e", "i", "o", "u", "ee", "oo", "ai"];
+const SAS_CODAS: [&str; 16] = [
+    "b", "d", "f", "g", "k", "l", "m", "n", "p", "r", "s", "t", "v", "z", "ch", "sh",
+];
+
+/// Number of SAS words shown to the user. 4 words x 11 bits = 44 bits.
+pub const SAS_WORD_COUNT: usize = 4;
+
+/// Short Authentication String binding a completed ECDH to the two identities involved.
+///
+/// QR pairing authenticates NOTHING on its own: scanning a code proves only that some code
+/// was scanned, so a relay sitting between two phones can hand each of them its own key and
+/// read everything afterwards. Both sides display this string and the users compare it before
+/// the contact is saved. A man-in-the-middle holds two DIFFERENT shared secrets, so the two
+/// screens disagree.
+///
+/// 44 bits, not the 20 of a 6-digit code. The attack here is not offline: the adversary
+/// learns the first public key when it is displayed and can grind its own keypair to force a
+/// SAS collision *while the two users are still fumbling through a sequential scan*. 2^20
+/// ECDH-and-hash is under a second on one machine. 6 digits is the ZRTP number and it assumes
+/// a human VOICE is authenticating liveness; two screens carry no such signal.
+///
+/// The public keys are sorted so both sides derive the same value without knowing whose is
+/// whose. `shared` is the [`pair_derive`] output.
+pub fn pair_sas(shared: &[u8; 32], pk_a: &[u8; 32], pk_b: &[u8; 32]) -> [u8; 8] {
+    let (lo, hi) = if pk_a <= pk_b { (pk_a, pk_b) } else { (pk_b, pk_a) };
+    let mut material = [0u8; 96];
+    material[..32].copy_from_slice(shared);
+    material[32..64].copy_from_slice(lo);
+    material[64..].copy_from_slice(hi);
+    let mut k = blake3::derive_key("mesh-core:v1:pair-sas", &material);
+    let mut out = [0u8; 8];
+    out.copy_from_slice(&k[..8]);
+    material.zeroize();
+    k.zeroize();
+    out
+}
+
+/// Render a [`pair_sas`] value as [`SAS_WORD_COUNT`] words, 11 bits each.
+pub fn sas_words(sas: &[u8; 8]) -> Vec<String> {
+    let v = u64::from_be_bytes(*sas);
+    (0..SAS_WORD_COUNT)
+        .map(|i| {
+            // Take the top 44 bits, 11 at a time. Each 11-bit index splits 4/3/4.
+            let idx = ((v >> (64 - 11 * (i + 1))) & 0x7FF) as usize;
+            format!(
+                "{}{}{}",
+                SAS_ONSETS[(idx >> 7) & 0xF],
+                SAS_VOWELS[(idx >> 4) & 0x7],
+                SAS_CODAS[idx & 0xF]
+            )
+        })
+        .collect()
 }
 
 /// Advance a pair-chain key from `from_epoch` to `to_epoch` (A3 forward secrecy).
@@ -144,7 +221,13 @@ pub fn pair_ratchet(key: &[u8; 32], from_epoch: u32, to_epoch: u32) -> Option<[u
         let mut material = [0u8; 36];
         material[..32].copy_from_slice(&k);
         material[32..].copy_from_slice(&e.to_be_bytes());
-        k = blake3::derive_key("mesh-core:v1:pairratchet", &material);
+        let next = blake3::derive_key("mesh-core:v1:pairratchet", &material);
+        // M5: every intermediate here is a PAST epoch's key, and the whole point of the
+        // ratchet is that those become unrecoverable. Leaving them on the stack — which a
+        // long catch-up now fills thousands of copies of — undercuts exactly that claim.
+        material.zeroize();
+        k.zeroize();
+        k = next;
     }
     Some(k)
 }
@@ -309,6 +392,53 @@ mod tests {
             pair_seed_v2(&shared, &salt_a, &salt_b),
             pair_seed_v2(&shared, &salt_a, &salt_c)
         );
+    }
+
+    #[test]
+    fn pair_sas_is_order_independent_and_binds_both_identities() {
+        let shared: [u8; 32] = [0x11; 32];
+        let pk_a: [u8; 32] = core::array::from_fn(|i| i as u8);
+        let pk_b: [u8; 32] = core::array::from_fn(|i| (255 - i) as u8);
+
+        // Both sides must derive the same string without knowing whose key is whose.
+        assert_eq!(pair_sas(&shared, &pk_a, &pk_b), pair_sas(&shared, &pk_b, &pk_a));
+
+        // A man-in-the-middle holds a DIFFERENT shared secret with each side. That is the
+        // whole mechanism: if this ever compared equal, the SAS would authenticate nothing.
+        let shared_mitm: [u8; 32] = [0x22; 32];
+        assert_ne!(pair_sas(&shared, &pk_a, &pk_b), pair_sas(&shared_mitm, &pk_a, &pk_b));
+
+        // Substituting an identity must also change it, so a relay cannot reuse one leg's
+        // string while presenting its own key to the other side.
+        let pk_m: [u8; 32] = [0x77; 32];
+        assert_ne!(pair_sas(&shared, &pk_a, &pk_b), pair_sas(&shared, &pk_a, &pk_m));
+    }
+
+    #[test]
+    fn sas_words_cover_the_table_exactly() {
+        // 16 onsets x 8 vowels x 16 codas = 2048 = 2^11, so every 11-bit index maps to a
+        // distinct word and none is unreachable. A table that was not a power of two would
+        // silently bias the string and cost entropy.
+        assert_eq!(SAS_ONSETS.len() * SAS_VOWELS.len() * SAS_CODAS.len(), 2048);
+
+        let words = sas_words(&[0u8; 8]);
+        assert_eq!(words.len(), SAS_WORD_COUNT);
+        assert_eq!(words, vec!["bab", "bab", "bab", "bab"]);
+
+        // All-ones in the top 44 bits selects the last entry of every column.
+        let words = sas_words(&[0xFF; 8]);
+        assert_eq!(words, vec!["zaish", "zaish", "zaish", "zaish"]);
+
+        // Deterministic, and a change inside the consumed bits changes the string.
+        let a = sas_words(&[1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(a, sas_words(&[1, 2, 3, 4, 5, 6, 7, 8]));
+        assert_ne!(a, sas_words(&[2, 2, 3, 4, 5, 6, 7, 8]));
+
+        // Only the top 44 bits are consumed, so the low 20 are deliberately ignored. Pinned
+        // because it bounds the strength: this string is 44 bits, not 64, and any future
+        // change to SAS_WORD_COUNT must be reasoned about against that.
+        // Byte 5 straddles the boundary: its high nibble is consumed, its low nibble is not.
+        assert_eq!(a, sas_words(&[1, 2, 3, 4, 5, 0x0F, 0xFF, 0xFF]));
     }
 
     #[test]

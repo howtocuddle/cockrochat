@@ -12,6 +12,7 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.os.Build
 import android.os.ParcelUuid
 import java.util.UUID
 
@@ -79,6 +80,15 @@ class BleRadio(private val ctx: Context) {
     /** Called with a human-readable debug line on notable events. */
     var onDebug: ((String) -> Unit)? = null
 
+    /**
+     * Fired when a frame is actually on air, with true when it is a private-window frame.
+     *
+     * `startAdvertising` is asynchronous — the stack confirms (or refuses) later, on
+     * `onAdvertisingSetStarted`. Callers were showing "sent" the instant they called it, so a
+     * frame the controller rejected still displayed a tick. This reports what the stack said.
+     */
+    var onFrameOnAir: ((private: Boolean) -> Unit)? = null
+
     /** Human-readable current advertising mode, shown in the stats pane. */
     @Volatile
     var advMode: String = "off"
@@ -93,6 +103,37 @@ class BleRadio(private val ctx: Context) {
         } catch (e: Exception) {
             "radio: capability query failed: ${e.message}"
         }
+    }
+
+    /**
+     * The two host conditions that silently kill BLE scanning.
+     *
+     * On API <= 30 the system location toggle must be ON or `startScan` succeeds, reports no
+     * error, and simply never delivers a result — producing a phone that advertises normally
+     * (so peers see it) while hearing nothing at all, with no log anywhere. API 31+ is exempt
+     * because the manifest declares BLUETOOTH_SCAN with `neverForLocation`.
+     */
+    private fun scanEnvironment(): String {
+        val sdk = Build.VERSION.SDK_INT
+        val locationOn = try {
+            val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+            when {
+                lm == null -> "unknown"
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.P -> lm.isLocationEnabled.toString()
+                else -> android.provider.Settings.Secure.getInt(
+                    ctx.contentResolver,
+                    android.provider.Settings.Secure.LOCATION_MODE,
+                    android.provider.Settings.Secure.LOCATION_MODE_OFF
+                ).let { (it != android.provider.Settings.Secure.LOCATION_MODE_OFF).toString() }
+            }
+        } catch (e: Exception) {
+            "unknown(${e.message})"
+        }
+        val needsLocation = sdk <= 30
+        return "sdk=$sdk locationServices=$locationOn" +
+            if (needsLocation && locationOn == "false") {
+                " *** SCANNING WILL RETURN NOTHING: Android $sdk requires location services ON ***"
+            } else ""
     }
 
     fun isSupported(): Boolean {
@@ -133,7 +174,14 @@ class BleRadio(private val ctx: Context) {
             }
             // Legacy fallback carries no frame data (frames flow over GATT): restarting
             // the beacon every epoch is pure churn. Keep it running.
-            if (advMode == "legacy-uuid(gatt)" && currentAdvSet != null) return
+            if (advMode == "legacy-uuid(gatt)" && currentAdvSet != null) {
+                // No advertising callback follows this early return, so a caller waiting on
+                // onFrameOnAir would wait forever — leaving every legacy phone's messages
+                // stuck showing "queued". On this path the beacon is already up and the frame
+                // travels over GATT, so "on air" means "handed to the GATT plane": say so now.
+                onFrameOnAir?.invoke(privateAdvActive)
+                return
+            }
             try {
                 // Stop any prior advertising set
                 stopAdvertisingLocked()
@@ -204,6 +252,7 @@ class BleRadio(private val ctx: Context) {
                             return
                         }
                         onDebug?.invoke("adv set started: status=$status (${if (ok) "ok" else "failed"})")
+                        if (ok) onFrameOnAir?.invoke(privateAdvActive)
                         if (ok && advertisingSet != null) {
                             val pending = synchronized(advLock) {
                                 val p = pendingFrame
@@ -311,6 +360,7 @@ class BleRadio(private val ctx: Context) {
                         return
                     }
                     onDebug?.invoke("legacy adv started: status=$status (${if (ok) "ok" else "failed"})")
+                    if (ok) onFrameOnAir?.invoke(privateAdvActive)
                 }
 
                 override fun onAdvertisingSetStopped(advertisingSet: AdvertisingSet?) {
@@ -440,6 +490,13 @@ class BleRadio(private val ctx: Context) {
             val legacyCallback = callback(legacyPeerEvents = true)
             scanCallbacks += legacyCallback
             scanner.startScan(listOf(filter), legacySettings, legacyCallback)
+            // Only scan FAILURES were logged, so a successfully-started scan that then
+            // delivers nothing (the classic "location services off" case, which returns no
+            // results and no error) was indistinguishable from a scan that never started.
+            onDebug?.invoke(
+                "scan started: 2 scans (extended + legacy) mode=" +
+                    (if (lowLatency) "LOW_LATENCY" else "BALANCED") + " " + scanEnvironment()
+            )
         } catch (e: SecurityException) {
             onDebug?.invoke("startScanning SecurityException: ${e.message}")
         }
@@ -548,10 +605,19 @@ class BleRadio(private val ctx: Context) {
     }
 
     @SuppressLint("MissingPermission")
+    /**
+     * Air [frame] on the primary set for [durationMs], then put the public frame back.
+     *
+     * [restoreFrame] is a supplier, not a value: a private window can span an epoch rollover,
+     * and the epoch loop deliberately skips airing while one is open. Capturing the frame when
+     * the window opened therefore restored an epoch-stale frame to the air for up to a full
+     * epoch — while the GATT plane, whose restore callback reads the live frame, correctly got
+     * the fresh one. Returning null skips the restore (the radio is being torn down).
+     */
     fun advertisePrivateOnce(
         frame: ByteArray,
         durationMs: Long,
-        restoreFrame: ByteArray,
+        restoreFrame: () -> ByteArray?,
         codedPhy: Boolean,
         advIntervalMs: Long,
         onRestored: () -> Unit
@@ -574,7 +640,7 @@ class BleRadio(private val ctx: Context) {
         val restore = Runnable {
             synchronized(advLock) { privateRestore = null }
             privateAdvActive = false
-            startAdvertising(restoreFrame, codedPhy, advIntervalMs)
+            restoreFrame()?.let { startAdvertising(it, codedPhy, advIntervalMs) }
             onRestored()
         }
         synchronized(advLock) { privateRestore = restore }
